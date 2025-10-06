@@ -1,0 +1,10 @@
+﻿{
+    "profiles": {
+      "ManipulatorKinematics (Package)": {
+        "commandName": "MsixPackage"
+      },
+      "ManipulatorKinematics (Unpackaged)": {
+        "commandName": "Project"
+      }
+    }
+}

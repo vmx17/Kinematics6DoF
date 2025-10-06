@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "KLibUT (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "KLibUT (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
