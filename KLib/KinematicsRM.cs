@@ -22,8 +22,8 @@ public class MDHParameters
         A      = a;
         D      = d;
         Offset = offset;
-        MinAnglesDeg = minAngles ?? new double[] { -360, -360, -360, -360, -360, -360 };
-        MaxAnglesDeg = maxAngles ?? new double[] {  360,  360,  360,  360,  360,  360 };
+        MinAnglesDeg = minAngles ?? [-180, -180, -180, -180, -180, -360];
+        MaxAnglesDeg = maxAngles ?? [180,  90,  180,  180,  180,  360];
     }
 }
 
@@ -90,7 +90,11 @@ public class Manipulator6DoF
 
     public void SetToolReferenceAxis(ToolReferenceAxis axis) => _toolRefAxis = axis;
 
-    // Forward (row-major internal axes; uses RMLib row-major helpers)
+    // Forward (row-major internal axes; uses internal MDH recursion)
+    // verbose:
+    // 0: no output
+    // 1: origins O0..O6 + Tool (Tool == flange)
+    // 2: origins + axes directions for frames 1..6 + Tool (duplicate of frame 6)
     public double[,] Forward(double[] q, int verbose = 0)
     {
         if (q.Length != 6) throw new ArgumentException("q must have 6 elements");
@@ -100,8 +104,9 @@ public class Manipulator6DoF
         var d = _mdh.D;
         var offset = _mdh.Offset;
 
-        var origins = new double[7][];
-        var axes = new double[7][,]; // row-major: row=axis (X,Y,Z)
+        // 0..6 base→flange, 7 = tool (now identical to flange)
+        var origins = new double[8][];
+        var axes = new double[8][,]; // row-major rows: X,Y,Z
 
         origins[0] = new[] { 0.0, 0.0, 0.0 };
         axes[0] = new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
@@ -116,7 +121,6 @@ public class Manipulator6DoF
             double[] Yprev = { axes[i][1, 0], axes[i][1, 1], axes[i][1, 2] };
             double[] Zprev = { axes[i][2, 0], axes[i][2, 1], axes[i][2, 2] };
 
-            // Same modified DH style as earlier implementation (row-major adaptation)
             var Xi = new double[3];
             Xi[0] = ct * Xprev[0] + st * (ca * Yprev[0] + sa * Zprev[0]);
             Xi[1] = ct * Xprev[1] + st * (ca * Yprev[1] + sa * Zprev[1]);
@@ -145,95 +149,83 @@ public class Manipulator6DoF
             origins[i + 1][2] = origins[i][2] + a[i] * Xprev[2] + d[i] * Zi[2];
         }
 
-        // Build flange homogeneous (columns = axes)
+        // Flange homogeneous (T06); columns are world X,Y,Z, position
         var T06 = new double[4, 4];
         for (var row = 0; row < 3; row++)
         {
-            T06[row, 0] = axes[6][0, row]; // X
-            T06[row, 1] = axes[6][1, row]; // Y
-            T06[row, 2] = axes[6][2, row]; // Z
+            T06[row, 0] = axes[6][0, row];
+            T06[row, 1] = axes[6][1, row];
+            T06[row, 2] = axes[6][2, row];
             T06[row, 3] = origins[6][row];
         }
         T06[3, 0] = 0; T06[3, 1] = 0; T06[3, 2] = 0; T06[3, 3] = 1;
 
-        double xt = _tool[0], yt = _tool[1], zt = _tool[2];
-        double zx = _tool[3], zy = _tool[4], zz = _tool[5];
-
-        var R_tool_row = BuildToolRotationRowMajor(zx, zy, zz, _toolRefAxis);
-        var T6_tool = new double[4, 4];
-        for (var row = 0; row < 3; row++)
+        // Tool frame identical to flange (origin + axes)
+        origins[7] = new[] { origins[6][0], origins[6][1], origins[6][2] };
+        axes[7] = new double[,]
         {
-            T6_tool[row, 0] = R_tool_row[0, row];
-            T6_tool[row, 1] = R_tool_row[1, row];
-            T6_tool[row, 2] = R_tool_row[2, row];
-        }
-        T6_tool[0, 3] = xt; T6_tool[1, 3] = yt; T6_tool[2, 3] = zt;
-        T6_tool[3, 0] = 0; T6_tool[3, 1] = 0; T6_tool[3, 2] = 0; T6_tool[3, 3] = 1;
+            { axes[6][0,0], axes[6][0,1], axes[6][0,2] },
+            { axes[6][1,0], axes[6][1,1], axes[6][1,2] },
+            { axes[6][2,0], axes[6][2,1], axes[6][2,2] }
+        };
 
-        var T0_tool = MatMul4(T06, T6_tool);
-
-        if (verbose >= 1)
+        if (verbose == 1 || verbose == 2)
         {
-            Console.WriteLine("---- Origins ----");
-            for (var i = 0; i <= 6; i++)
+            Console.WriteLine("---- Origins (World) ----");
+            for (int i = 0; i <= 6; i++)
                 Console.WriteLine($"O{i}: ({origins[i][0]:F3}, {origins[i][1]:F3}, {origins[i][2]:F3})");
-            Console.WriteLine($"Tool: ({T0_tool[0, 3]:F3}, {T0_tool[1, 3]:F3}, {T0_tool[2, 3]:F3})");
+            Console.WriteLine($"Tool: ({origins[7][0]:F3}, {origins[7][1]:F3}, {origins[7][2]:F3})");
         }
-        if (verbose >= 2)
+        if (verbose == 2)
         {
-            Console.WriteLine("---- Axes (row-major internal) ----");
-            for (var i = 1; i <= 6; i++)
+            Console.WriteLine("---- Axes (World Directions) ----");
+            for (int i = 1; i <= 6; i++)
             {
-                Console.WriteLine($"Frame {i} X=({axes[i][0, 0]:F3},{axes[i][0, 1]:F3},{axes[i][0, 2]:F3})");
-                Console.WriteLine($"         Y=({axes[i][1, 0]:F3},{axes[i][1, 1]:F3},{axes[i][1, 2]:F3})");
-                Console.WriteLine($"         Z=({axes[i][2, 0]:F3},{axes[i][2, 1]:F3},{axes[i][2, 2]:F3})");
+                Console.WriteLine($"Frame {i} X=({axes[i][0,0]:F3},{axes[i][0,1]:F3},{axes[i][0,2]:F3}) " +
+                                  $"Y=({axes[i][1,0]:F3},{axes[i][1,1]:F3},{axes[i][1,2]:F3}) " +
+                                  $"Z=({axes[i][2,0]:F3},{axes[i][2,1]:F3},{axes[i][2,2]:F3})");
             }
+            Console.WriteLine($"Tool   X=({axes[7][0,0]:F3},{axes[7][0,1]:F3},{axes[7][0,2]:F3}) " +
+                              $"Y=({axes[7][1,0]:F3},{axes[7][1,1]:F3},{axes[7][1,2]:F3}) " +
+                              $"Z=({axes[7][2,0]:F3},{axes[7][2,1]:F3},{axes[7][2,2]:F3})");
         }
 
-        return T0_tool;
+        return T06;
     }
 
     public double[][] InverseGeometric(double[,] T_target, out bool[] flags, int verbose = 0)
     {
+        // Since tool == flange, treat T_target directly as flange pose
         var solutions = new double[8][]; for (int i = 0; i < 8; i++) solutions[i] = new double[6];
         flags = new bool[8];
         var printed = false;
 
-        double xt = _tool[0], yt = _tool[1], zt = _tool[2];
-        double zx = _tool[3], zy = _tool[4], zz = _tool[5];
-        var R_tool_row = BuildToolRotationRowMajor(zx, zy, zz, ToolReferenceAxis.FlangeY);
-        var T_tool = new double[4, 4];
-        for (var r = 0; r < 3; r++)
-        {
-            T_tool[r, 0] = R_tool_row[0, r];
-            T_tool[r, 1] = R_tool_row[1, r];
-            T_tool[r, 2] = R_tool_row[2, r];
-        }
-        T_tool[0, 3] = xt; T_tool[1, 3] = yt; T_tool[2, 3] = zt; T_tool[3, 3] = 1;
-
-        var T_tool_inv = InvertHomogeneous(T_tool);
-        var T_target_flange = MatMul4(T_target, T_tool_inv);
-
         var a = _mdh.A; var d = _mdh.D; var off = _mdh.Offset;
         double d1 = d[0], a2 = a[1], a3 = a[2], d4 = d[3], d6 = d[5];
 
-        double ax = T_target_flange[0, 2], ay = T_target_flange[1, 2], az = T_target_flange[2, 2];
-        double Px = T_target_flange[0, 3], Py = T_target_flange[1, 3], Pz = T_target_flange[2, 3];
+        // 1. Extract target flange (== tool) rotation Z axis and position
+        double ax = T_target[0, 2], ay = T_target[1, 2], az = T_target[2, 2];
+        double Px = T_target[0, 3], Py = T_target[1, 3], Pz = T_target[2, 3];
 
+        // 2. Compute wrist center Pw = P - d6 * Z_flange
         var Pwx = Px - d6 * ax;
         var Pwy = Py - d6 * ay;
         var Pwz = Pz - d6 * az;
 
+        // 3. Base joint candidates (q1)
         var th1a = Math.Atan2(Pwy, Pwx);
         var th1b = th1a + Math.PI;
 
+        // 4. Distances for (incorrect) planar triangle model
         var r_sq = Pwx * Pwx + Pwy * Pwy;
         var s = Pwz - d1;
         var D_sq = r_sq + s * s;
 
+        // 5. Collapsed “link-3” length (L3) and cosine law
         var L3 = Math.Sqrt(a3 * a3 + d4 * d4);
         var cosBase = (D_sq - a2 * a2 - L3 * L3) / (2 * a2 * L3);
-        if (Math.Abs(cosBase) > 1) return solutions;
+        if (Math.Abs(cosBase) > 1) return solutions; // (Failure point)
+
         var baseAng = Math.Acos(cosBase);
         var phi = Math.Atan2(d4, a3);
         var th3a = baseAng - phi;
@@ -257,7 +249,7 @@ public class Manipulator6DoF
             var T23 = DHTransform(t3 + off[2], d[2], a[2], _mdh.Alpha[2]);
             var T03 = MatMul4(MatMul4(T01, T12), T23);
             var T03_inv = InvertHomogeneous(T03);
-            var T36 = MatMul4(T03_inv, T_target_flange);
+            var T36 = MatMul4(T03_inv, T_target);
 
             var cos_t5 = T36[1, 2];
             if (Math.Abs(cos_t5) > 1) { idx += 2; continue; }
@@ -296,9 +288,14 @@ public class Manipulator6DoF
                     flags[idx] = true;
                     if (verbose == 1 && !printed)
                     {
-                        Console.WriteLine("--- InverseGeometric first valid ---");
+                        Console.WriteLine($"--- InverseGeometric first valid (idx {idx}) ---");
                         Forward(solutions[idx], 1);
                         printed = true;
+                    }
+                    else if (verbose >= 2)
+                    {
+                        Console.WriteLine($"--- InverseGeometric valid solution (idx {idx}) ---");
+                        Forward(solutions[idx], verbose >= 2 ? 2 : 1);
                     }
                 }
                 idx++;
@@ -307,23 +304,10 @@ public class Manipulator6DoF
         return solutions;
     }
 
-    public double[] InverseJacobian(double[,] T_target, double[] q_initial, out bool success, int maxIterations = 1000, double tolerance = 1e-6, double alpha = 0.1, int verbose = 0)
+    public double[] InverseJacobian(double[,] T_target, double[] q_initial, out bool success,
+        int maxIterations = 1000, double tolerance = 1e-6, double alpha = 0.1, int verbose = 0)
     {
-        double xt = _tool[0], yt = _tool[1], zt = _tool[2];
-        double zx = _tool[3], zy = _tool[4], zz = _tool[5];
-        var R_tool_row = BuildToolRotationRowMajor(zx, zy, zz, ToolReferenceAxis.FlangeY);
-        var T_tool = new double[4, 4];
-        for (var r = 0; r < 3; r++)
-        {
-            T_tool[r, 0] = R_tool_row[0, r];
-            T_tool[r, 1] = R_tool_row[1, r];
-            T_tool[r, 2] = R_tool_row[2, r];
-        }
-        T_tool[0, 3] = xt; T_tool[1, 3] = yt; T_tool[2, 3] = zt; T_tool[3, 3] = 1;
-
-        var T_tool_inv = InvertHomogeneous(T_tool);
-        var _ = MatMul4(T_target, T_tool_inv); // kept for parity
-
+        // Tool == flange; no tool adjustment
         var q = (double[])q_initial.Clone();
         var dX = new double[6];
 
@@ -352,10 +336,10 @@ public class Manipulator6DoF
             if (err < tolerance * tolerance)
             {
                 success = true;
-                if (verbose == 1)
+                if (verbose >= 1)
                 {
                     Console.WriteLine("--- InverseJacobian converged ---");
-                    Forward(q, 1);
+                    Forward(q, verbose >= 2 ? 2 : 1);
                 }
                 return q;
             }

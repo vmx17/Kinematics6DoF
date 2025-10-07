@@ -10,13 +10,14 @@ KLib's forward kinematics and part of inverse (Jacobian) kinematics are working 
 
 ## Target robot type
 
-This code includes a sample robot: a 6DoF manipulator with joints arranged as Round-Turn-Turn-Round-Turn-Round (RTTRTR). In its initial posture, all link positions have a Y-coordinate of zero. Each joint is rotational, and the joint angle $\theta_i$ serves as the control parameter for the robot's configuration. There are no prismatic (linear) joints. If you are not accustoms to "RTTRTR" expression, please refer to the following figure.
+This code includes a sample robot: a 6DoF manipulator with joints arranged as Round-Turn-Turn-Round-Turn-Round (RTTRTR). In its initial posture, all link positions have a Y-coordinate of zero. Each joint is rotational, and the joint angle $\theta_i$ serves as the control parameter for the robot's configuration. There are no prismatic (linear) joints. If you're not familiar with designations like "RTTRTR", please refer to the following Fig-1.
 
 <div align="center">
     <img src="./RTTRTR.drawio.svg" alt="Fig-1. What is RTTRTR?" width="400">
     <div>Fig-1. definition of RTTRTR manipulator</div>
 </div>
 <br>
+'R' refers to a joint where the central axis of the preceding link and the axis of rotation coincide, while 'T' refers to a joint where the central axis of the preceding link and the axis of rotation are orthogonal. From the base to the tip of the robot, these 'R' and 'T' joints are connected in sequence and denoted by combinations such as "RTTRTR".  
 Of course, you can define another type in the code.
 
 ## Coodinate system representation
@@ -39,7 +40,8 @@ $$
  \boldsymbol{\varSigma_0 \underset{^0T_1}{\Longrightarrow} \varSigma_1 \underset{^1T_2}{\Longrightarrow} \varSigma_2 \underset{^2T_3}{\Longrightarrow} ... \underset{^{n-1}T_n}{\Longrightarrow} \varSigma_n \underset{^{n}T_t}{\Longrightarrow} \varSigma_t }
 $$
 
-Here, $n = 6$, and ${}^{n}T_t$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) coordinate system. For now, the absolute coordinate $\varSigma$ is the same as $\varSigma_0$. $\varSigma_0$ is a fixed base coordinate where the manipulator is installed.
+Here, $n = 6$, and ${}^{n}T_t$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) coordinate system. For now, the absolute coordinate $\varSigma$ is the same as $\varSigma_0$. $\varSigma_0$ is a fixed (not rotate) base coordinate where the manipulator is installed.  
+All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate joint). 
 
 The coordinate transformation at each robot axis is given by:
 
@@ -84,7 +86,7 @@ a: link length (length of the common normal line)
 θ: rotation around the local Z axis (joint angle), with possible offset values defined separately.  
 d: link offset (distance between the feet of the two common perpendiculars on the joint)  
 
-*These parameters comes from WLKATA MiRobot, an RTTRTR 6DoF mini manipulator.
+*These parameters comes from WLKATA MiRobot, an RTTRTR 6DoF mini manipulator but directions of each local axis are NOT according to it.
 
 The initial posture of the robot is defined below. (Lengths are not to scale.)
 <div align="center">
@@ -104,4 +106,3 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 |O5 (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
 |O6 (Joint 6 origin)|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1)|
 
-*All rotations are around the local $Z_i$ axis. All $Z_i$ are defined as the axis of rotation of joint $i$, except $Z_0$.

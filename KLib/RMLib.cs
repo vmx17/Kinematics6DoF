@@ -41,7 +41,7 @@ public static class RMLib
     }
     #endregion
 
-    #region Row-Major 3x3 utilities
+    #region Row-Major Martix utilities
 
     /// <summary>
     /// Allocate a new row-major 3x3 from three axis vectors (assumed already orthonormal).
@@ -88,7 +88,7 @@ public static class RMLib
     /// If Rr rows=axes, its transpose has columns=axes. To keep row-major
     /// layout, we reinterpret (so effectively swap roles).
     /// </summary>
-    public static double[,] RowMajorTranspose(double[,] Rr)
+    public static double[,] TransposeRM3x3(double[,] Rr)
     {
         var Rt = new double[3, 3];
         for (var i = 0; i < 3; i++)
@@ -97,13 +97,23 @@ public static class RMLib
         return Rt;
     }
 
+    internal static double[,] TransposeRM(double[,] M)
+    {
+        int rows = M.GetLength(0), cols = M.GetLength(1);
+        var Tt = new double[cols, rows];
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+                Tt[c, r] = M[r, c];
+        return Tt;
+    }
+
     /// <summary>
     /// Multiply two row-major rotation matrices (conceptually): R = A * B
     /// Inputs A,B: rows are axes of each rotation in parent frame.
     /// Output is also row-major. We internally convert to column-major,
     /// multiply, then convert back to row-major for clarity & safety.
     /// </summary>
-    public static double[,] RowMajorMul(double[,] A_r, double[,] B_r)
+    public static double[,] MatMulRM3x3(double[,] A_r, double[,] B_r)
     {
         var A_c = RowToColumn(A_r);
         var B_c = RowToColumn(B_r);
@@ -114,6 +124,26 @@ public static class RMLib
                 for (var k = 0; k < 3; k++)
                     C_c[r, c] += A_c[r, k] * B_c[k, c];
         return ColumnToRow(C_c);
+    }
+
+    internal static double[,] MatMulRM4x4(double[,] A, double[,] B)
+    {
+        var C = new double[4, 4];
+        for (var i = 0; i < 4; i++)
+            for (var j = 0; j < 4; j++)
+                for (var k = 0; k < 4; k++)
+                    C[i, j] += A[i, k] * B[k, j];
+        return C;
+    }
+
+    internal static double[] MatVecMulRM(double[,] M, double[] v)
+    {
+        int rows = M.GetLength(0), cols = M.GetLength(1);
+        var r = new double[rows];
+        for (var i = 0; i < rows; i++)
+            for (var j = 0; j < cols; j++)
+                r[i] += M[i, j] * v[j];
+        return r;
     }
 
     /// <summary>
@@ -169,7 +199,7 @@ public static class RMLib
         }
 
         var x = Xc.Normalized();
-        var y = Cross(z, x).Normalized();
+        var y = CrossRMVec3(z, x).Normalized();
 
         return MakeRowMajor3x3(x, y, z);
     }
@@ -206,16 +236,16 @@ public static class RMLib
         // R_inv = R^T; p' = -R^T * t
         var Rc = RowToColumn(Rr);
         var Rt = new double[3, 3];
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 3; j++)
+        for (var i = 0; i < 3; i++)
+            for (var j = 0; j < 3; j++)
                 Rt[i, j] = Rc[j, i];
 
         var pInv = new double[3];
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
             pInv[i] = -(Rt[i, 0] * t.X + Rt[i, 1] * t.Y + Rt[i, 2] * t.Z);
 
         var T = new double[4, 4];
-        for (int r = 0; r < 3; r++)
+        for (var r = 0; r < 3; r++)
         {
             T[r, 0] = Rt[r, 0];
             T[r, 1] = Rt[r, 1];
@@ -226,17 +256,83 @@ public static class RMLib
         return T;
     }
 
+    internal static double[,] InvertHomogeneousRM(double[,] T)
+    {
+        var R = new double[3, 3];
+        for (var r = 0; r < 3; r++)
+            for (var c = 0; c < 3; c++)
+                R[r, c] = T[r, c];
+        var Rt = new double[3, 3];
+        for (var r = 0; r < 3; r++)
+            for (var c = 0; c < 3; c++)
+                Rt[r, c] = R[c, r];
+        var p = new[] { T[0, 3], T[1, 3], T[2, 3] };
+        var pInv = new double[3];
+        for (var r = 0; r < 3; r++)
+            pInv[r] = -(Rt[r, 0] * p[0] + Rt[r, 1] * p[1] + Rt[r, 2] * p[2]);
+
+        var Inv = new double[4, 4];
+        for (var r = 0; r < 3; r++)
+        {
+            Inv[r, 0] = Rt[r, 0]; Inv[r, 1] = Rt[r, 1]; Inv[r, 2] = Rt[r, 2]; Inv[r, 3] = pInv[r];
+        }
+        Inv[3, 0] = 0; Inv[3, 1] = 0; Inv[3, 2] = 0; Inv[3, 3] = 1;
+        return Inv;
+    }
     #endregion
 
     #region Math helpers
-
-    public static Vec3 Cross(Vec3 a, Vec3 b) =>
+    internal static double[] CrossRM3x3(double[] a, double[] b) =>
+    [
+            a[1]*b[2] - a[2]*b[1],
+            a[2]*b[0] - a[0]*b[2],
+            a[0]*b[1] - a[1]*b[0]
+    ];
+    public static Vec3 CrossRMVec3(Vec3 a, Vec3 b) =>
         new(a.Y * b.Z - a.Z * b.Y,
             a.Z * b.X - a.X * b.Z,
             a.X * b.Y - a.Y * b.X);
 
+    internal static double[,] DHTransformRM(double theta, double d, double a, double alpha)
+    {
+        double ct = Math.Cos(theta), st = Math.Sin(theta);
+        double ca = Math.Cos(alpha), sa = Math.Sin(alpha);
+        return new double[4, 4]
+        {
+            { ct, -st*ca,  st*sa, a*ct },
+            { st,  ct*ca, -ct*sa, a*st },
+            { 0,      sa,     ca,    d },
+            { 0,       0,      0,    1 }
+        };
+    }
+
     public static double[,] IdentityRow3() =>
         new double[3, 3] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
+    /// <summary>
+    /// 角度正規化（(-π, π] に正規化）
+    /// -π より小さい場合は 2π を加算、π を超える場合は 2π を減算して収めます。
+    /// 反復 while を避け 1 回の補正で済むよう % を使用。
+    /// </summary>
+    internal static double NormalizeAngleSigned(double angle)
+    {
+        const double TwoPi = 2.0 * Math.PI;
+        angle %= TwoPi;                // (-2π, 2π)
+        if (angle <= -Math.PI) angle += TwoPi;  // (-π, π]
+        else if (angle > Math.PI) angle -= TwoPi;
+        return angle;
+    }
+
+    /// <summary>
+    /// 角度正規化（[0, 2π) に正規化）
+    /// 負値なら 2π を加算して非負に揃えます。
+    /// </summary>
+    public static double NormalizeAnglePositive(double angle)
+    {
+        const double TwoPi = 2.0 * Math.PI;
+        angle %= TwoPi;
+        if (angle < 0) angle += TwoPi;
+        return angle;
+    }
     #endregion
 }
