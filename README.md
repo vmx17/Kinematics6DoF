@@ -1,4 +1,4 @@
-v# Manipulator Kinematics
+# Manipulator Kinematics
 
 This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.
 The implementation is in C#.
@@ -18,6 +18,7 @@ This code includes a sample robot: a 6DoF manipulator with joints arranged as Ro
 </div>
 <br>
 'R' refers to a joint where the central axis of the preceding link and the axis of rotation coincide, while 'T' refers to a joint where the central axis of the preceding link and the axis of rotation are orthogonal. From the base to the tip of the robot, these 'R' and 'T' joints are connected in sequence and denoted by combinations such as "RTTRTR".  
+
 Of course, you can define another type in the code.
 
 ## Coodinate system representation
@@ -28,7 +29,7 @@ The space where the robot is installed is called the absolute coordinate system.
 
 Joint and link indices start at 0 for the fixed robot base and increment sequentially toward the end-effector: 1, 2, ..., n. Coordinates are expressed as (X, Y, Z), with units in millimeters. Values are rounded to three decimal places for precision. Angular measurements are in radians, but when converted to degrees, values are rounded to four decimal places.
 
-The orientation of links and coordinate axes is represented by unit-length vectors. The final stage of the manipulator includes a fixed-orientation end-effector, which supports multiple tools. The position and orientation of each tool tip are defined in the 6-axis local coordinate system as $(xt, yt, zt, rx, ry, rz)$, and managed as an array. The orientation of the coordinate system in which the end-effector is mounted matches that of the 6-axis local frame. The parameters $rx, ry, rz$ represent rotational angles about the $X_t$, $Y_t$, and $Z_t$ axes of the end-effector coordinate system $\varSigma_t$, respectively, and are applied in the order $rz \rightarrow ry \rightarrow rx$ during forward kinematics. Though this is not an Euler expression, it will be added later.
+The orientation of links and coordinate axes is represented by unit-length vectors. The final stage of the manipulator includes a fixed-orientation end-effector, currently it supports only one tool for one instance. The position and direction of tool tip is defined in the tool-axis local coordinate system as $(Xt, Yt, Zt, vx, vy, vz)$, and managed as an array. The orientation of the coordinate system in which the end-effector is mounted matches that of the 6-axis local frame. The parameters $vx, vy, vz$ represent vector on the end-effector coordinate system $\varSigma_t$. This is not an Euler expression nor rotation angles about Xt, Yt, Zt. The way to handle the vector is decided by implementation.
 
 ## Target Specification
 
@@ -40,7 +41,7 @@ $$
  \boldsymbol{\varSigma_0 \underset{^0T_1}{\Longrightarrow} \varSigma_1 \underset{^1T_2}{\Longrightarrow} \varSigma_2 \underset{^2T_3}{\Longrightarrow} ... \underset{^{n-1}T_n}{\Longrightarrow} \varSigma_n \underset{^{n}T_t}{\Longrightarrow} \varSigma_t }
 $$
 
-Here, $n = 6$, and ${}^{n}T_t$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) coordinate system. For now, the absolute coordinate $\varSigma$ is the same as $\varSigma_0$. $\varSigma_0$ is a fixed (not rotate) base coordinate where the manipulator is installed.  
+Here, $n = 6$, and ${}^{n}T_t$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. For now, the absolute coordinate $\varSigma$ is the same as $\varSigma_0$. $\varSigma_0$ is a fixed (not rotate) base coordinate where the manipulator is installed.  
 All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate joint). 
 
 The coordinate transformation at each robot axis is given by:
@@ -60,6 +61,7 @@ The ${}^{i-1}T_i$ transformation is performed in the following sequence:
 4. Translate by $d_i$ along the $z_i$ axis  
 
 The expression can be abbreviated as follows:
+
 $$
 \boldsymbol{{}^{i-1}T_i = RotX_{i-1} \rightarrow TransX_{i-1} \rightarrow RotZ_i \rightarrow TransZ_i}
 $$
@@ -95,7 +97,7 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 </div>
 <br>
 
---- Frame Origins ($^0T_6$) ---  
+--- Design of Frame Origins ($^0T_t$) ---  
 |frame|position on absolute space|Local axis verctor on absolute space|
 |---|---|---|
 |O0 (Fixed base)|(0, 0, 0)|fixed axis, just defines location and direction of the robot base. X0:(1,0,0), Y0:(0,1,0), Z0:(0,0,1)|
@@ -105,4 +107,6 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 |O4 (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
 |O5 (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
 |O6 (Joint 6 origin)|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1)|
+|Ot (Tool tip)|(depends on "tool tip position and vector" given at instance of robot.)|O6 is as same as origin and direction of tool axis. Zt is the direction of tool tip.|
 
+"initial posture" means all joint angles $\theta_i = 0$ and equips tool with $(Xt, Yt, Zt, vx, vy, vz) = (0,0,0,0,0,1)$, which is the "tool tip position and vector".
