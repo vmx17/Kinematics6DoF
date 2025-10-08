@@ -38,10 +38,10 @@ The orientation of links and coordinate axes is represented by unit-length vecto
 The coordinate origin $O_i$ is placed on the Z-axis of joint $i$. The local coordinate system is denoted by $\varSigma_i$. The transformation matrix from the local coordinate system $\varSigma_{i-1}$ to $\varSigma_i$ is represented as $^{i-1}T_i$.
 
 $$
- \boldsymbol{\varSigma_0 \underset{^0T_1}{\Longrightarrow} \varSigma_1 \underset{^1T_2}{\Longrightarrow} \varSigma_2 \underset{^2T_3}{\Longrightarrow} ... \underset{^{n-1}T_n}{\Longrightarrow} \varSigma_n \underset{^{n}T_t}{\Longrightarrow} \varSigma_t }
+ \boldsymbol{\varSigma_0 \underset{^0T_1}{\Longrightarrow} \varSigma_1 \underset{^1T_2}{\Longrightarrow} \varSigma_2 \underset{^2T_3}{\Longrightarrow} ... \underset{^{n-1}T_n}{\Longrightarrow} \varSigma_n \underset{^{n}T_{tcp}}{\Longrightarrow} \varSigma_{tcp} }
 $$
 
-Here, $n = 6$, and ${}^{n}T_t$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. For now, the absolute coordinate $\varSigma$ is the same as $\varSigma_0$. $\varSigma_0$ is a fixed (not rotate) base coordinate where the manipulator is installed.  
+Here, $n = 6$, and $^{n}T_{tcp}$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. For now, the absolute coordinate $\varSigma_{abs}$ is as same as $\varSigma_0$. $\varSigma_0$ is a fixed (not rotate) base coordinate where the manipulator is installed.  
 All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate joint). 
 
 The coordinate transformation at each robot axis is given by:
@@ -53,7 +53,7 @@ $$
 *Please note the distinction between $a$ and $\alpha$. The usage of these symbols follows conventional practice.  
 *The order of this matrix multiplication formula may vary in code. When applying matrices to a vector, the order is $RotX, TransX, RotZ, TransZ$, so the formula is $newVector = TransZ \times RotZ \times TransX \times RotX \times Vector$. Depending on the library or struct definition (column-major or row-major), additional matrix operations may be needed. The "$\rightarrow$" indicates the order of translation, not matrix multiplication "$\times$". The strict transformation sequence is as follows.
 
-The ${}^{i-1}T_i$ transformation is performed in the following sequence:
+The $^{i-1}T_i$ transformation is performed in the following sequence:
 
 1. Rotate by $\alpha_{i-1}$ around the $x_{i-1}$ axis  
 2. Translate by $a_{i-1}$ along the $x_{i-1}$ axis  
@@ -63,7 +63,7 @@ The ${}^{i-1}T_i$ transformation is performed in the following sequence:
 The expression can be abbreviated as follows:
 
 $$
-\boldsymbol{{}^{i-1}T_i = RotX_{i-1} \rightarrow TransX_{i-1} \rightarrow RotZ_i \rightarrow TransZ_i}
+\boldsymbol{^{i-1}T_i = RotX_{i-1} \rightarrow TransX_{i-1} \rightarrow RotZ_i \rightarrow TransZ_i}
 $$
 
 The orientation of the robot base coordinate system is aligned with the absolute coordinate axes as described above, and the robot base is assumed to be placed at the origin of the absolute coordinate system.
@@ -71,7 +71,7 @@ The orientation of the robot base coordinate system is aligned with the absolute
 $\overrightarrow{Z_0} = (0,0,1)$  
 $\overrightarrow{X_0} = (1,0,0)$  
 
-In the following table, $\overrightarrow{Z_i}$ and $\overrightarrow{X_i}$ denote the directions of the Z-axis and X-axis of the local coordinate system $\varSigma_i$, respectively. Though these vectors are not part of MDH, they are expressed in the absolute coordinate frame for confirmation, under the condition that all joint input angles $\theta_i$ are set to zero.
+In the following table, $\overrightarrow{Z_i}$ and $\overrightarrow{X_i}$ denote the directions of the Z-axis and X-axis of the local coordinate system $\varSigma_i$, respectively. Though these vectors are not part of MDH, they are expressed in the $\varSigma_0$, now which is as same as absolute frame $\varSigma_{abs}$ for confirmation, under the condition that all joint input angles $\theta_i$ are set to zero.
 
 |L|$\alpha_{i-1}$|$a_{i-1}$|$offset+\theta_i$|$d_i$|$\overrightarrow{Z_i}$|$\overrightarrow{X_i}$|
 |---|---:|---:|---:|---:|---|---|
@@ -106,18 +106,18 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 |O3 (Joint 3 origin)|(29.690, 0, 127+108)|X3:(0,0,1), Y3:(1,0,0), Z3:(0,1,0)|
 |O4 (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
 |O5 (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
-|O6 (Joint 6 origin)|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1)|
-|Ot (TCP)|(depends on "TCP position and vector" given at instance of robot.)|O6 is as same as origin and direction of tool axis. Zt is the direction of TCP.|
+|O6 (Joint 6 origin), Ot|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1) This is as same as (Xt, Yt, Zt).|
+|Otcp (TCP)|(depends on "TCP position and vector" given at instance of robot.)|O6 is as same as origin and direction of Ot on $\varSigma_t$. Ztcp is the direction of TCP.|
 
-"initial posture" means all joint angles $\theta_i = 0$ and equips tool with $(Xt, Yt, Zt, vx, vy, vz) = (0,0,0,0,0,1)$, which is the "TCP position and vector".  
-Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip." The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
+"initial posture" means all joint angles $\theta_i = 0$ and equips "null" tool, $(Xt, Yt, Zt, vxt, vyt, vzt) = (0,0,0,0,0,1)$, which is the "TCP position and vector" in $\varSigma_t$.  
+Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip". The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
 
 ### Forward Kinematics (FK)
 The MDH is sufficient for Forward Kinematics. The transformation from the absolute coordinate system to the TCP coordinate system are defined completely with the MDH. Remember, this FK includes the TCP position and direction.
 
 ### Inverse Kinematics (IK)
-The crank angle between $O_3$ and $O_4$ is the issue for Inverse Kinematics. The fixed crank angle is called "elbow". The crank might be able to remove defining the 4th link is $\overrightarrow{O_3O_4}$ and angle of $\theta_3$ and $\theta_5$ has some offset according to the angles of $O_3-elbow-O_4$. But, in real world, those offset are not revealed at teaching pendant. Then I want to remove such offset from MDH.
+The crank angle between $O_3$ and $O_4$ is the issue for Inverse Kinematics. The fixed crank angle is called "elbow". The crank might be able to remove defining the 4th link is $\overrightarrow{O_3O_4}$ and add some offset angles to $\theta_3$ and $\theta_5$ according to the triangle of $O_3-elbow-O_4$. But, in real world, those offset are not revealed at teaching pendant nor on any robot control languages. Then I want to remove such offset.
 
 #### Jacobian approach (working)
-#### Giometric approach (under development)
+#### Geometric approach (under development)
 #### Algebraic approach (not yet)
