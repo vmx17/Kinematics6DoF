@@ -40,8 +40,9 @@ The coordinate origin $O_i$ is placed on the Z-axis of joint $i$. The local coor
 $$
  \boldsymbol{\varSigma_0 \underset{^0T_1}{\Longrightarrow} \varSigma_1 \underset{^1T_2}{\Longrightarrow} \varSigma_2 \underset{^2T_3}{\Longrightarrow} ... \underset{^{n-1}T_n}{\Longrightarrow} \varSigma_n \underset{^{n}T_{tcp}}{\Longrightarrow} \varSigma_{tcp} }
 $$
+ 
+Here, $n = 6$, and $^{n}T_{tcp}$ represents the transformation from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. For now, the absolute coordinate system $\varSigma_{abs}$ is assumed to be the same as $\varSigma_0$. $\varSigma_0$ is a fixed (non-rotating) base coordinate system where the manipulator is mounted.
 
-Here, $n = 6$, and $^{n}T_{tcp}$ represents the transform from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. For now, the absolute coordinate $\varSigma_{abs}$ is as same as $\varSigma_0$. $\varSigma_0$ is a fixed (not rotate) base coordinate where the manipulator is installed.  
 All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate joint). 
 
 The coordinate transformation at each robot axis is given by:
@@ -97,7 +98,7 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 </div>
 <br>
 
---- Design of Frame Origins ($^0T_t$) ---  
+--- Design of Frame Origins ($^0T_{tcp}$) ---  
 |frame|position on absolute space|Local axis verctor on absolute space|
 |---|---|---|
 |O0 (Fixed base)|(0, 0, 0)|fixed axis, just defines location and direction of the robot base. X0:(1,0,0), Y0:(0,1,0), Z0:(0,0,1)|
@@ -107,7 +108,7 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 |O4 (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
 |O5 (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
 |O6 (Joint 6 origin), Ot|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1) This is as same as (Xt, Yt, Zt).|
-|Otcp (TCP)|(depends on "TCP position and vector" given at instance of robot.)|O6 is as same as origin and direction of Ot on $\varSigma_t$. Ztcp is the direction of TCP.|
+|Otcp (TCP)|(depends on "TCP position and vector" given at instance of robot.)|$Z_{tcp}$ is the direction of TCP.|
 
 "initial posture" means all joint angles $\theta_i = 0$ and equips "null" tool, $(Xt, Yt, Zt, vxt, vyt, vzt) = (0,0,0,0,0,1)$, which is the "TCP position and vector" in $\varSigma_t$.  
 Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip". The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
