@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,7 +17,7 @@ using Windows.ApplicationModel.Activation;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using System.Numerics; // for Matrix4x4, Vector3, etc.
-using Kinematics;
+using KinematicsCM;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -53,9 +53,5 @@ public partial class UnitTestApp : Application
         UITestMethodAttribute.DispatcherQueue = _window.DispatcherQueue;
 
         Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.Run(Environment.CommandLine);
-
-        double[] q = { 0, 0, 0, 0, 0, 0 };          // joint angles
-        double[] tool = { 0, 0, 0, 0, 0, 0 };       // tool offset
-
     }
 }

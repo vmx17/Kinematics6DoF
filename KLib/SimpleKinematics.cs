@@ -171,7 +171,7 @@ public class Manipulator6DoF
     public (double[] MinDeg, double[] MaxDeg) GetJointLimits() =>
         ((double[])_minDeg.Clone(), (double[])_maxDeg.Clone());
 
-    // ----- Forward Kinematics (uses constructor-selected tool) -----
+    // ----- Forward KinematicsCM (uses constructor-selected tool) -----
 
     public KinematicsResult Forward(double[] q)
     {
@@ -271,7 +271,7 @@ public class Manipulator6DoF
 
         // Decompose flange & relative rotation
         (var flangeRz, var flangeRy, var flangeRx) = ColumnMeasureUtility.CMLib.DecomposeZYX(flangeRot);
-        var R_rel = ColumnMeasureUtility.CMLib.Multiply(ColumnMeasureUtility.CMLib.Transpose(flangeRot), toolRot);
+        var R_rel = ColumnMeasureUtility.CMLib.Multiply3x3(ColumnMeasureUtility.CMLib.Transpose(flangeRot), toolRot);
         (var toolRz, var toolRy, var toolRx) = ColumnMeasureUtility.CMLib.DecomposeZYX(R_rel);
 
         if (_verbose >= 1)

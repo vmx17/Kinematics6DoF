@@ -13,7 +13,7 @@ public struct KinematicsResult
 
 public static class Manipulator6DoF
 {
-    // Forward Kinematics: returns a result object
+    // Forward KinematicsCM: returns a result object
     public static KinematicsResult Forward(double[] q, double[] tool, int verbose = 0)
     {
         if (q.Length != 6) throw new ArgumentException("q must have 6 elements");

@@ -1,4 +1,4 @@
-# Manipulator Kinematics
+v# Manipulator Kinematics
 
 This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.
 The implementation is in C#.
@@ -107,6 +107,17 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 |O4 (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
 |O5 (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
 |O6 (Joint 6 origin)|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1)|
-|Ot (Tool tip)|(depends on "tool tip position and vector" given at instance of robot.)|O6 is as same as origin and direction of tool axis. Zt is the direction of tool tip.|
+|Ot (TCP)|(depends on "TCP position and vector" given at instance of robot.)|O6 is as same as origin and direction of tool axis. Zt is the direction of TCP.|
 
-"initial posture" means all joint angles $\theta_i = 0$ and equips tool with $(Xt, Yt, Zt, vx, vy, vz) = (0,0,0,0,0,1)$, which is the "tool tip position and vector".
+"initial posture" means all joint angles $\theta_i = 0$ and equips tool with $(Xt, Yt, Zt, vx, vy, vz) = (0,0,0,0,0,1)$, which is the "TCP position and vector".  
+Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip." The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
+
+### Forward Kinematics (FK)
+The MDH is sufficient for Forward Kinematics. The transformation from the absolute coordinate system to the TCP coordinate system are defined completely with the MDH. Remember, this FK includes the TCP position and direction.
+
+### Inverse Kinematics (IK)
+The crank angle between $O_3$ and $O_4$ is the issue for Inverse Kinematics. The fixed crank angle is called "elbow". The crank might be able to remove defining the 4th link is $\overrightarrow{O_3O_4}$ and angle of $\theta_3$ and $\theta_5$ has some offset according to the angles of $O_3-elbow-O_4$. But, in real world, those offset are not revealed at teaching pendant. Then I want to remove such offset from MDH.
+
+#### Jacobian approach (working)
+#### Giometric approach (under development)
+#### Algebraic approach (not yet)

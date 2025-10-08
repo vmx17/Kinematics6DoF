@@ -108,12 +108,12 @@ public static class RMLib
     }
 
     /// <summary>
-    /// Multiply two row-major rotation matrices (conceptually): R = A * B
+    /// Multiply3x3 two row-major rotation matrices (conceptually): R = A * B
     /// Inputs A,B: rows are axes of each rotation in parent frame.
     /// Output is also row-major. We internally convert to column-major,
     /// multiply, then convert back to row-major for clarity & safety.
     /// </summary>
-    public static double[,] MatMulRM3x3(double[,] A_r, double[,] B_r)
+    public static double[,] MatMul3x3(double[,] A_r, double[,] B_r)
     {
         var A_c = RowToColumn(A_r);
         var B_c = RowToColumn(B_r);
@@ -126,7 +126,7 @@ public static class RMLib
         return ColumnToRow(C_c);
     }
 
-    internal static double[,] MatMulRM4x4(double[,] A, double[,] B)
+    internal static double[,] MatMul4x4(double[,] A, double[,] B)
     {
         var C = new double[4, 4];
         for (var i = 0; i < 4; i++)
@@ -136,7 +136,7 @@ public static class RMLib
         return C;
     }
 
-    internal static double[] MatVecMulRM(double[,] M, double[] v)
+    internal static double[] MatVecMul(double[,] M, double[] v)
     {
         int rows = M.GetLength(0), cols = M.GetLength(1);
         var r = new double[rows];
@@ -170,7 +170,7 @@ public static class RMLib
     {
         var z = zDir.Normalized();
         if (z.Norm() < 1e-12)
-            return IdentityRow3();
+            return Identity3x3();
 
         // Remove component along Z to get candidate X
         var dot = primaryRef.Dot(z);
@@ -194,12 +194,12 @@ public static class RMLib
                               fallback.Y - d3 * z.Y,
                               fallback.Z - d3 * z.Z);
                 if (Xc.Norm() < 1e-12)
-                    return IdentityRow3();
+                    return Identity3x3();
             }
         }
 
         var x = Xc.Normalized();
-        var y = CrossRMVec3(z, x).Normalized();
+        var y = CrossVec3(z, x).Normalized();
 
         return MakeRowMajor3x3(x, y, z);
     }
@@ -216,7 +216,7 @@ public static class RMLib
     {
         var Rc = RowToColumn(Rr);
         var T = new double[4, 4];
-        for (int r = 0; r < 3; r++)
+        for (var r = 0; r < 3; r++)
         {
             T[r, 0] = Rc[r, 0];
             T[r, 1] = Rc[r, 1];
@@ -256,7 +256,7 @@ public static class RMLib
         return T;
     }
 
-    internal static double[,] InvertHomogeneousRM(double[,] T)
+    internal static double[,] InvertHomogeneous4x4(double[,] T)
     {
         var R = new double[3, 3];
         for (var r = 0; r < 3; r++)
@@ -282,18 +282,18 @@ public static class RMLib
     #endregion
 
     #region Math helpers
-    internal static double[] CrossRM3x3(double[] a, double[] b) =>
+    internal static double[] Cross3x3(double[] a, double[] b) =>
     [
             a[1]*b[2] - a[2]*b[1],
             a[2]*b[0] - a[0]*b[2],
             a[0]*b[1] - a[1]*b[0]
     ];
-    public static Vec3 CrossRMVec3(Vec3 a, Vec3 b) =>
+    public static Vec3 CrossVec3(Vec3 a, Vec3 b) =>
         new(a.Y * b.Z - a.Z * b.Y,
             a.Z * b.X - a.X * b.Z,
             a.X * b.Y - a.Y * b.X);
 
-    internal static double[,] DHTransformRM(double theta, double d, double a, double alpha)
+    internal static double[,] DHTransform(double theta, double d, double a, double alpha)
     {
         double ct = Math.Cos(theta), st = Math.Sin(theta);
         double ca = Math.Cos(alpha), sa = Math.Sin(alpha);
@@ -306,28 +306,49 @@ public static class RMLib
         };
     }
 
-    public static double[,] IdentityRow3() =>
+    // 追加: Modified DH (Craig) 変換
+    // 引数: theta_i, d_i, a_{i-1}, alpha_{i-1}
+    internal static double[,] MDHTransform(double theta, double d, double aPrev, double alphaPrev)
+    {
+        double ct = Math.Cos(theta), st = Math.Sin(theta);
+        double ca = Math.Cos(alphaPrev), sa = Math.Sin(alphaPrev);
+        // MDH:
+        // [  ct     -st      0     a_{i-1} ]
+        // [  st ca  ct ca   -sa   -sa d_i  ]
+        // [  st sa  ct sa    ca    ca d_i  ]
+        // [   0       0       0      1     ]
+        return new double[4,4]
+        {
+            { ct,      -st,       0,    aPrev },
+            { st*ca,  ct*ca,    -sa,  -sa*d   },
+            { st*sa,  ct*sa,     ca,   ca*d   },
+            { 0,        0,       0,     1     }
+        };
+    }
+
+    internal static double[,] Identity3x3() =>
         new double[3, 3] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
-    /// <summary>
-    /// 角度正規化（(-π, π] に正規化）
-    /// -π より小さい場合は 2π を加算、π を超える場合は 2π を減算して収めます。
-    /// 反復 while を避け 1 回の補正で済むよう % を使用。
-    /// </summary>
+    // Added: 4x4 identity matrix (column-major standard homogeneous)
+    internal static double[,] Identity4x4() =>
+        new double[4, 4]
+        {
+            {1,0,0,0},
+            {0,1,0,0},
+            {0,0,1,0},
+            {0,0,0,1}
+        };
+
     internal static double NormalizeAngleSigned(double angle)
     {
         const double TwoPi = 2.0 * Math.PI;
-        angle %= TwoPi;                // (-2π, 2π)
-        if (angle <= -Math.PI) angle += TwoPi;  // (-π, π]
+        angle %= TwoPi;
+        if (angle <= -Math.PI) angle += TwoPi;
         else if (angle > Math.PI) angle -= TwoPi;
         return angle;
     }
 
-    /// <summary>
-    /// 角度正規化（[0, 2π) に正規化）
-    /// 負値なら 2π を加算して非負に揃えます。
-    /// </summary>
-    public static double NormalizeAnglePositive(double angle)
+    internal static double NormalizeAnglePositive(double angle)
     {
         const double TwoPi = 2.0 * Math.PI;
         angle %= TwoPi;

@@ -1,29 +1,48 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using RowMeasureUtility; // ★ 追加: RMLib の角度正規化を使う
 
 namespace KinematicsRM;
 
 // MDH parameter container
 public class MDHParameters
 {
-    public double[] Alpha { get; }
-    public double[] A { get; }
-    public double[] D { get; }
-    public double[] Offset { get; }
-    public double[] MinAnglesDeg { get; }
-    public double[] MaxAnglesDeg { get; }
+    public double[] Alpha
+    {
+        get;
+    }
+    public double[] A
+    {
+        get;
+    }
+    public double[] D
+    {
+        get;
+    }
+    public double[] Offset
+    {
+        get;
+    }
+    public double[] MinAnglesDeg
+    {
+        get;
+    }
+    public double[] MaxAnglesDeg
+    {
+        get;
+    }
 
     public MDHParameters(double[] alpha, double[] a, double[] d, double[] offset, double[]? minAngles = null, double[]? maxAngles = null)
     {
         if (alpha.Length != 6 || a.Length != 6 || d.Length != 6 || offset.Length != 6)
             throw new ArgumentException("All MDH parameter arrays must have 6 elements.");
-        Alpha  = alpha;
-        A      = a;
-        D      = d;
+        Alpha = alpha;
+        A = a;
+        D = d;
         Offset = offset;
         MinAnglesDeg = minAngles ?? [-180, -180, -180, -180, -180, -360];
-        MaxAnglesDeg = maxAngles ?? [180,  90,  180,  180,  180,  360];
+        MaxAnglesDeg = maxAngles ?? [180, 90, 180, 180, 180, 360];
     }
 }
 
@@ -37,8 +56,8 @@ public static class ManipulatorFactory
             [0, 29.69, 108, 20, 0, 0],
             [127, 0, 0, 168.98, 0, 24.29],
             [0, Math.PI/2, 0, 0, -Math.PI/2, 0],
-            [-179, -125, -155, -180, -120, -180],
-            [ 179,  125,  155,  180,  120,  180]
+            [-180, -180, -180, -180, -180, -360],
+            [180, 90, 180, 180, 180, 360]
         )
     };
 
@@ -52,13 +71,13 @@ public static class ManipulatorFactory
     {
         var r = string.IsNullOrWhiteSpace(robotName) ? "MiRobot" : robotName;
         var t = string.IsNullOrWhiteSpace(toolName)  ? "null"   : toolName;
-        if (!_mdhTable.TryGetValue(r, out var mdh))   throw new ArgumentException($"Unknown robot name: {r}");
+        if (!_mdhTable.TryGetValue(r, out var mdh)) throw new ArgumentException($"Unknown robot name: {r}");
         if (!_toolTable.TryGetValue(t, out var tool)) throw new ArgumentException($"Unknown tool name: {t}");
         return new Manipulator6DoF(mdh, tool);
     }
 
     public static IEnumerable<string> GetAvailableRobotNames() => _mdhTable.Keys;
-    public static IEnumerable<string> GetAvailableToolNames()  => _toolTable.Keys;
+    public static IEnumerable<string> GetAvailableToolNames() => _toolTable.Keys;
 }
 
 public class Manipulator6DoF
@@ -72,10 +91,8 @@ public class Manipulator6DoF
 
     public enum ToolReferenceAxis
     {
-        FlangeY = 0,
-        FlangeX = 1
+        FlangeY = 0, FlangeX = 1
     }
-
     private ToolReferenceAxis _toolRefAxis = ToolReferenceAxis.FlangeY;
 
     public Manipulator6DoF(MDHParameters mdh, double[] tool)
@@ -98,16 +115,10 @@ public class Manipulator6DoF
     public double[,] Forward(double[] q, int verbose = 0)
     {
         if (q.Length != 6) throw new ArgumentException("q must have 6 elements");
+        var alpha = _mdh.Alpha; var a = _mdh.A; var d = _mdh.D; var offset = _mdh.Offset;
 
-        var alpha = _mdh.Alpha;
-        var a = _mdh.A;
-        var d = _mdh.D;
-        var offset = _mdh.Offset;
-
-        // 0..6 base→flange, 7 = tool (now identical to flange)
         var origins = new double[8][];
-        var axes = new double[8][,]; // row-major rows: X,Y,Z
-
+        var axes = new double[8][,];
         origins[0] = new[] { 0.0, 0.0, 0.0 };
         axes[0] = new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
@@ -149,18 +160,16 @@ public class Manipulator6DoF
             origins[i + 1][2] = origins[i][2] + a[i] * Xprev[2] + d[i] * Zi[2];
         }
 
-        // Flange homogeneous (T06); columns are world X,Y,Z, position
         var T06 = new double[4, 4];
-        for (var row = 0; row < 3; row++)
+        for (var r = 0; r < 3; r++)
         {
-            T06[row, 0] = axes[6][0, row];
-            T06[row, 1] = axes[6][1, row];
-            T06[row, 2] = axes[6][2, row];
-            T06[row, 3] = origins[6][row];
+            T06[r, 0] = axes[6][0, r];
+            T06[r, 1] = axes[6][1, r];
+            T06[r, 2] = axes[6][2, r];
+            T06[r, 3] = origins[6][r];
         }
         T06[3, 0] = 0; T06[3, 1] = 0; T06[3, 2] = 0; T06[3, 3] = 1;
 
-        // Tool frame identical to flange (origin + axes)
         origins[7] = new[] { origins[6][0], origins[6][1], origins[6][2] };
         axes[7] = new double[,]
         {
@@ -172,144 +181,199 @@ public class Manipulator6DoF
         if (verbose == 1 || verbose == 2)
         {
             Console.WriteLine("---- Origins (World) ----");
-            for (int i = 0; i <= 6; i++)
+            for (var i = 0; i <= 6; i++)
                 Console.WriteLine($"O{i}: ({origins[i][0]:F3}, {origins[i][1]:F3}, {origins[i][2]:F3})");
             Console.WriteLine($"Tool: ({origins[7][0]:F3}, {origins[7][1]:F3}, {origins[7][2]:F3})");
         }
         if (verbose == 2)
         {
             Console.WriteLine("---- Axes (World Directions) ----");
-            for (int i = 1; i <= 6; i++)
+            for (var i = 1; i <= 6; i++)
             {
-                Console.WriteLine($"Frame {i} X=({axes[i][0,0]:F3},{axes[i][0,1]:F3},{axes[i][0,2]:F3}) " +
-                                  $"Y=({axes[i][1,0]:F3},{axes[i][1,1]:F3},{axes[i][1,2]:F3}) " +
-                                  $"Z=({axes[i][2,0]:F3},{axes[i][2,1]:F3},{axes[i][2,2]:F3})");
+                Console.WriteLine($"Frame {i} X=({axes[i][0, 0]:F3},{axes[i][0, 1]:F3},{axes[i][0, 2]:F3}) " +
+                                  $"Y=({axes[i][1, 0]:F3},{axes[i][1, 1]:F3},{axes[i][1, 2]:F3}) " +
+                                  $"Z=({axes[i][2, 0]:F3},{axes[i][2, 1]:F3},{axes[i][2, 2]:F3})");
             }
-            Console.WriteLine($"Tool   X=({axes[7][0,0]:F3},{axes[7][0,1]:F3},{axes[7][0,2]:F3}) " +
-                              $"Y=({axes[7][1,0]:F3},{axes[7][1,1]:F3},{axes[7][1,2]:F3}) " +
-                              $"Z=({axes[7][2,0]:F3},{axes[7][2,1]:F3},{axes[7][2,2]:F3})");
+            Console.WriteLine($"Tool   X=({axes[7][0, 0]:F3},{axes[7][0, 1]:F3},{axes[7][0, 2]:F3}) " +
+                              $"Y=({axes[7][1, 0]:F3},{axes[7][1, 1]:F3},{axes[7][1, 2]:F3}) " +
+                              $"Z=({axes[7][2, 0]:F3},{axes[7][2, 1]:F3},{axes[7][2, 2]:F3})");
         }
 
         return T06;
     }
 
+    // --- NEW: Fully replaced InverseGeometric with crank-based elbow solver (option B) ---
+    // This removes the former planar cosine-law approximation (r_sq, s, D_sq, L3, cosBase).
+    // Method:
+    // 1. Enumerate q1 candidates (atan2 + π).
+    // 2. For each q1: compute wrist center Pw = P - d6 * Z_flange.
+    // 3. Solve f(q2) = W2.z + d4 = 0  (W2 = R02^T (Pw - O2)) by bracket + secant refinement.
+    // 4. For each root q2: compute q3 from   W2.x = a3 + a4 cos q3,  W2.y = a4 sin q3.
+    // 5. Build T03, solve wrist (q4–q6) from T36 = T03^{-1} * T_target (same as previous method).
+    // 6. Joint limit / duplicate filtering / forward verification.
+    //
+    // Notes:
+    // - Uses original MDH arrays: a[2]=a3, a[3]=a4, d[3]=d4.
+    // - Assumes offset[2]==0 (if not, adjust q3 by subtracting offset before normalization).
+    // - If no roots found for a q1 branch, it produces no solutions for that branch.
     public double[][] InverseGeometric(double[,] T_target, out bool[] flags, int verbose = 0)
     {
-        // Since tool == flange, treat T_target directly as flange pose
-        var solutions = new double[8][]; for (int i = 0; i < 8; i++) solutions[i] = new double[6];
-        flags = new bool[8];
-        var printed = false;
-
+        var allSolutions = new List<double[]>();
         var a = _mdh.A; var d = _mdh.D; var off = _mdh.Offset;
-        double d1 = d[0], a2 = a[1], a3 = a[2], d4 = d[3], d6 = d[5];
+        double a3 = a[2], a4 = a[3], d4 = d[3], d6 = d[5];
 
-        // 1. Extract target flange (== tool) rotation Z axis and position
-        double ax = T_target[0, 2], ay = T_target[1, 2], az = T_target[2, 2];
         double Px = T_target[0, 3], Py = T_target[1, 3], Pz = T_target[2, 3];
+        double ZX = T_target[0, 2], ZY = T_target[1, 2], ZZ = T_target[2, 2];
 
-        // 2. Compute wrist center Pw = P - d6 * Z_flange
-        var Pwx = Px - d6 * ax;
-        var Pwy = Py - d6 * ay;
-        var Pwz = Pz - d6 * az;
-
-        // 3. Base joint candidates (q1)
-        var th1a = Math.Atan2(Pwy, Pwx);
-        var th1b = th1a + Math.PI;
-
-        // 4. Distances for (incorrect) planar triangle model
-        var r_sq = Pwx * Pwx + Pwy * Pwy;
-        var s = Pwz - d1;
-        var D_sq = r_sq + s * s;
-
-        // 5. Collapsed “link-3” length (L3) and cosine law
-        var L3 = Math.Sqrt(a3 * a3 + d4 * d4);
-        var cosBase = (D_sq - a2 * a2 - L3 * L3) / (2 * a2 * L3);
-        if (Math.Abs(cosBase) > 1) return solutions; // (Failure point)
-
-        var baseAng = Math.Acos(cosBase);
-        var phi = Math.Atan2(d4, a3);
-        var th3a = baseAng - phi;
-        var th3b = -baseAng - phi;
-
-        var pairs = new (double t1, double t3)[] { (th1a, th3a), (th1a, th3b), (th1b, th3a), (th1b, th3b) };
-        var idx = 0;
-        foreach (var (t1, t3) in pairs)
+        if (verbose >= 2)
         {
-            double s1 = Math.Sin(t1), c1 = Math.Cos(t1);
-            double s3p = Math.Sin(t3 + phi), c3p = Math.Cos(t3 + phi);
-            var k1 = a2 + L3 * c3p;
-            var k2 = L3 * s3p;
-            var proj = c1 * Pwx + s1 * Pwy;
-            var c2 = (k1 * proj + k2 * s) / (k1 * k1 + k2 * k2);
-            var s2 = (k2 * proj - k1 * s) / (k1 * k1 + k2 * k2);
-            var t2 = Math.Atan2(s2, c2);
+            Console.WriteLine("---- Target Tool Pose (World) ----");
+            Console.WriteLine($"Pos : ({Px:F3}, {Py:F3}, {Pz:F3})");
+            Console.WriteLine($"Z   : ({ZX:F3}, {ZY:F3}, {ZZ:F3})");
+        }
 
-            var T01 = DHTransform(t1 + off[0], d[0], a[0], _mdh.Alpha[0]);
-            var T12 = DHTransform(t2 + off[1], d[1], a[1], _mdh.Alpha[1]);
-            var T23 = DHTransform(t3 + off[2], d[2], a[2], _mdh.Alpha[2]);
-            var T03 = MatMul4(MatMul4(T01, T12), T23);
-            var T03_inv = InvertHomogeneous(T03);
-            var T36 = MatMul4(T03_inv, T_target);
+        var PwX = Px - d6 * ZX;
+        var PwY = Py - d6 * ZY;
+        var PwZ = Pz - d6 * ZZ;
+        if (verbose >= 2)
+            Console.WriteLine($"Pw  : ({PwX:F3}, {PwY:F3}, {PwZ:F3})");
 
-            var cos_t5 = T36[1, 2];
-            if (Math.Abs(cos_t5) > 1) { idx += 2; continue; }
-            var t5p = Math.Acos(cos_t5);
-            var t5m = -t5p;
+        var q1a = Math.Atan2(PwY, PwX);
+        var q1b = RMLib.NormalizeAngleSigned(q1a + Math.PI);
+        foreach (var q1raw in new[] { q1a, q1b })
+        {
+            var q1 = RMLib.NormalizeAngleSigned(q1raw);
+            if (!WithinLimit(0, q1)) continue;
+            if (verbose >= 2) Console.WriteLine($"\n-- q1 Candidate: {q1 * 180.0 / Math.PI:F4} deg");
 
-            foreach (var t5 in new[] { t5p, t5m })
+            var q2Roots = SolveQ2Roots(q1, PwX, PwY, PwZ, verbose);
+            if (q2Roots.Count == 0 && verbose >= 2)
+                Console.WriteLine("   (No q2 roots)");
+
+            foreach (var q2 in q2Roots)
             {
-                var s5 = Math.Sin(t5);
-                double t4, t6;
-                if (Math.Abs(s5) > 1e-6)
-                {
-                    t4 = Math.Atan2(T36[2, 2] / s5, T36[0, 2] / s5);
-                    t6 = Math.Atan2(T36[1, 1] / s5, -T36[1, 0] / s5);
-                }
-                else
-                {
-                    t4 = 0;
-                    t6 = Math.Atan2(T36[2, 1], T36[2, 0]);
-                }
+                if (!WithinLimit(1, q2)) continue;
 
-                solutions[idx][0] = NormalizeAngle(t1 - off[0]);
-                solutions[idx][1] = NormalizeAngle(t2 - off[1]);
-                solutions[idx][2] = NormalizeAngle(t3 - off[2]);
-                solutions[idx][3] = NormalizeAngle(t4 - off[3]);
-                solutions[idx][4] = NormalizeAngle(t5 - off[4]);
-                solutions[idx][5] = NormalizeAngle(t6 - off[5]);
+                var W2 = ComputeW2(q1, q2, PwX, PwY, PwZ);
+                double vx = W2[0], vy = W2[1], vz = W2[2];
 
-                var within = true;
-                for (var j = 0; j < 6; j++)
+                if (Math.Abs(vy + d4) > 1e-3)      // ← 旧: (vz + d4)
+                    continue;
+
+                var cos3 = (vx - a3) / a4;
+                var sin3 = vz / a4;             // ← sin は vz / a4 へ (旧: vy / a4)
+                var norm = cos3 * cos3 + sin3 * sin3;
+                if (Math.Abs(norm - 1.0) > 5e-3) continue;
+
+                var q3 = RMLib.NormalizeAngleSigned(Math.Atan2(sin3, cos3));
+                if (!WithinLimit(2, q3)) continue;
+
+                var T01 = RMLib.DHTransform(q1 + off[0], d[0], a[0], _mdh.Alpha[0]);
+                var T12 = RMLib.DHTransform(q2 + off[1], d[1], a[1], _mdh.Alpha[1]);
+                var T23 = RMLib.DHTransform(q3 + off[2], d[2], a[2], _mdh.Alpha[2]);
+                var T03 = RMLib.MatMul4x4(RMLib.MatMul4x4(T01, T12), T23);
+                var T36 = RMLib.MatMul4x4(RMLib.InvertHomogeneous4x4(T03), T_target);
+
+                var cos_q5 = T36[1, 2];
+                if (cos_q5 < -1 || cos_q5 > 1) continue;
+
+                foreach (var q5cand in new[] { Math.Acos(cos_q5), -Math.Acos(cos_q5) })
                 {
-                    if (solutions[idx][j] < _minAnglesRad[j] || solutions[idx][j] > _maxAnglesRad[j]) { within = false; break; }
-                }
-                if (within)
-                {
-                    flags[idx] = true;
-                    if (verbose == 1 && !printed)
+                    var q5 = RMLib.NormalizeAngleSigned(q5cand);
+                    var s5 = Math.Sin(q5);
+                    double q4, q6;
+                    if (Math.Abs(s5) > 1e-6)
                     {
-                        Console.WriteLine($"--- InverseGeometric first valid (idx {idx}) ---");
-                        Forward(solutions[idx], 1);
-                        printed = true;
+                        q4 = RMLib.NormalizeAngleSigned(Math.Atan2(T36[2, 2] / s5, T36[0, 2] / s5));
+                        q6 = RMLib.NormalizeAngleSigned(Math.Atan2(T36[1, 1] / s5, -T36[1, 0] / s5));
                     }
-                    else if (verbose >= 2)
+                    else
                     {
-                        Console.WriteLine($"--- InverseGeometric valid solution (idx {idx}) ---");
-                        Forward(solutions[idx], verbose >= 2 ? 2 : 1);
+                        q4 = 0;
+                        q6 = RMLib.NormalizeAngleSigned(Math.Atan2(T36[2, 1], T36[2, 0]));
                     }
+
+                    if (!WithinLimit(3, q4) || !WithinLimit(4, q5) || !WithinLimit(5, q6))
+                        continue;
+
+                    // ------------------- ここで O2..O6 をデバッグ出力（q4,q5,q6 が確定した後） -------------------
+                    if (verbose >= 2)
+                    {
+                        // 再構築用 DH 行列（各関節オフセット込み角度）
+                        var T01d = RMLib.DHTransform(q1 + off[0], d[0], a[0], _mdh.Alpha[0]);
+                        var T12d = RMLib.DHTransform(q2 + off[1], d[1], a[1], _mdh.Alpha[1]);
+                        var T23d = RMLib.DHTransform(q3 + off[2], d[2], a[2], _mdh.Alpha[2]);
+                        var T34d = RMLib.DHTransform(q4 + off[3], d[3], a[3], _mdh.Alpha[3]);
+                        var T45d = RMLib.DHTransform(q5 + off[4], d[4], a[4], _mdh.Alpha[4]);
+                        var T56d = RMLib.DHTransform(q6 + off[5], d[5], a[5], _mdh.Alpha[5]);
+
+                        var T02d = RMLib.MatMul4x4(T01d, T12d);
+                        var T03d = RMLib.MatMul4x4(T02d, T23d);
+                        var T04d = RMLib.MatMul4x4(T03d, T34d);
+                        var T05d = RMLib.MatMul4x4(T04d, T45d);
+                        var T06d = RMLib.MatMul4x4(T05d, T56d);
+
+                        double[] O2dbg = { T02d[0, 3], T02d[1, 3], T02d[2, 3] };
+                        double[] O3dbg = { T03d[0, 3], T03d[1, 3], T03d[2, 3] };
+                        double[] O4dbg = { T04d[0, 3], T04d[1, 3], T04d[2, 3] };
+                        double[] O5dbg = { T05d[0, 3], T05d[1, 3], T05d[2, 3] };
+                        double[] O6dbg = { T06d[0, 3], T06d[1, 3], T06d[2, 3] };
+
+                        Console.WriteLine("   -- Debug Origins (q1..q6 確定後) --");
+                        Console.WriteLine($"     O2=({O2dbg[0]:F3},{O2dbg[1]:F3},{O2dbg[2]:F3})");
+                        Console.WriteLine($"     O3=({O3dbg[0]:F3},{O3dbg[1]:F3},{O3dbg[2]:F3})");
+                        Console.WriteLine($"     O4=({O4dbg[0]:F3},{O4dbg[1]:F3},{O4dbg[2]:F3})");
+                        Console.WriteLine($"     O5=({O5dbg[0]:F3},{O5dbg[1]:F3},{O5dbg[2]:F3})");
+                        Console.WriteLine($"     O6=({O6dbg[0]:F3},{O6dbg[1]:F3},{O6dbg[2]:F3})");
+                        Console.WriteLine($"     Pw (再掲)=({PwX:F3},{PwY:F3},{PwZ:F3})  (※ O4=O5 と一致するはず)");
+                    }
+                    // ---------------------------------------------------------------------------------------------
+
+                    var candidate = new double[6];
+                    candidate[0] = RMLib.NormalizeAngleSigned(q1 - off[0]);
+                    candidate[1] = RMLib.NormalizeAngleSigned(q2 - off[1]);
+                    candidate[2] = RMLib.NormalizeAngleSigned(q3 - off[2]);
+                    candidate[3] = RMLib.NormalizeAngleSigned(q4 - off[3]);
+                    candidate[4] = RMLib.NormalizeAngleSigned(q5 - off[4]);
+                    candidate[5] = RMLib.NormalizeAngleSigned(q6 - off[5]);
+
+                    if (!WithinLimits(candidate)) continue;
+                    if (IsDuplicate(allSolutions, candidate, 1e-3)) continue;
+
+                    var Tchk = Forward(candidate, 0);
+                    if (!PoseMatch(Tchk, T_target)) continue;
+
+                    allSolutions.Add(candidate);
+                    if (verbose >= 2)
+                        Console.WriteLine($"   ACCEPT q= [{string.Join(", ", candidate.Select(v => (v * 180.0 / Math.PI).ToString("F3")))}]");
                 }
-                idx++;
             }
         }
-        return solutions;
+
+        flags = new bool[allSolutions.Count];
+        for (var i = 0; i < flags.Length; i++) flags[i] = true;
+        return allSolutions.ToArray();
     }
 
-    public double[] InverseJacobian(double[,] T_target, double[] q_initial, out bool success,
-        int maxIterations = 1000, double tolerance = 1e-6, double alpha = 0.1, int verbose = 0)
+    // ======== InverseJacobian (復活) ========
+    public double[] InverseJacobian(
+        double[,] T_target,
+        double[] q_initial,
+        out bool success,
+        int maxIterations = 600,
+        double tolerance = 1e-6,
+        double alpha = 0.1,
+        int verbose = 0)
     {
-        // Tool == flange; no tool adjustment
         var q = (double[])q_initial.Clone();
         var dX = new double[6];
+
+        if (verbose >= 2)
+        {
+            Console.WriteLine("---- Target Pose (InverseJacobian) ----");
+            Console.WriteLine($"Pos : ({T_target[0, 3]:F3},{T_target[1, 3]:F3},{T_target[2, 3]:F3})");
+            Console.WriteLine($"Z   : ({T_target[0, 2]:F3},{T_target[1, 2]:F3},{T_target[2, 2]:F3})");
+        }
 
         for (var iter = 0; iter < maxIterations; iter++)
         {
@@ -325,32 +389,44 @@ public class Manipulator6DoF
             double[] o_t = { T_target[0, 1], T_target[1, 1], T_target[2, 1] };
             double[] a_t = { T_target[0, 2], T_target[1, 2], T_target[2, 2] };
 
-            var cn = Cross3(n_c, n_t);
-            var co = Cross3(o_c, o_t);
-            var ca = Cross3(a_c, a_t);
+            var cn = RMLib.Cross3x3(n_c, n_t);
+            var co = RMLib.Cross3x3(o_c, o_t);
+            var ca = RMLib.Cross3x3(a_c, a_t);
             dX[3] = 0.5 * (cn[0] + co[0] + ca[0]);
             dX[4] = 0.5 * (cn[1] + co[1] + ca[1]);
             dX[5] = 0.5 * (cn[2] + co[2] + ca[2]);
 
-            double err = 0; for (var k = 0; k < 6; k++) err += dX[k] * dX[k];
-            if (err < tolerance * tolerance)
+            double errSq = 0;
+            for (var k = 0; k < 6; k++) errSq += dX[k] * dX[k];
+            if (errSq < tolerance * tolerance)
             {
                 success = true;
                 if (verbose >= 1)
                 {
-                    Console.WriteLine("--- InverseJacobian converged ---");
+                    Console.WriteLine($"--- InverseJacobian converged iter={iter} err^2={errSq:E2} ---");
                     Forward(q, verbose >= 2 ? 2 : 1);
                 }
                 return q;
             }
 
             var J = CalculateJacobian(q);
-            var JT = Transpose(J);
-            var dq = MatVecMul(JT, dX);
+            var JT = RMLib.TransposeRM(J);
+            var dq = RMLib.MatVecMul(JT, dX);
+
             for (var j = 0; j < 6; j++)
-                q[j] = NormalizeAngle(q[j] + alpha * dq[j]);
+            {
+                q[j] = RMLib.NormalizeAngleSigned(q[j] + alpha * dq[j]);
+                if (q[j] < _minAnglesRad[j]) q[j] = _minAnglesRad[j];
+                if (q[j] > _maxAnglesRad[j]) q[j] = _maxAnglesRad[j];
+            }
+
+            if (verbose >= 2)
+                Console.WriteLine($"Iter {iter} errSq={errSq:E3} q=[{string.Join(", ", q.Select(v => (v * 180 / Math.PI).ToString("F2")))}]");
         }
+
         success = false;
+        if (verbose >= 1)
+            Console.WriteLine("--- InverseJacobian: NOT converged ---");
         return q;
     }
 
@@ -403,118 +479,157 @@ public class Manipulator6DoF
             origins[i + 1][1] = origins[i][1] + a[i] * Xprev[1] + d[i] * Zi[1];
             origins[i + 1][2] = origins[i][2] + a[i] * Xprev[2] + d[i] * Zi[2];
 
-            double[] z_i = { axes[i][2, 0], axes[i][2, 1], axes[i][2, 2] };
+            // Revolute joint axis = previous frame Z
+            double[] zAxisPrev = { axes[i][2, 0], axes[i][2, 1], axes[i][2, 2] };
             var p_i = origins[i];
             double[] p_diff = { p_eff[0] - p_i[0], p_eff[1] - p_i[1], p_eff[2] - p_i[2] };
-            var Jv = Cross3(z_i, p_diff);
+            var Jv = RMLib.Cross3x3(zAxisPrev, p_diff);
 
             J[0, i] = Jv[0]; J[1, i] = Jv[1]; J[2, i] = Jv[2];
-            J[3, i] = z_i[0]; J[4, i] = z_i[1]; J[5, i] = z_i[2];
+            J[3, i] = zAxisPrev[0]; J[4, i] = zAxisPrev[1]; J[5, i] = zAxisPrev[2];
         }
         return J;
     }
 
-    private static double NormalizeAngle(double a)
+    // ======== q2 root solve helpers (既存) ========
+    private List<double> SolveQ2Roots(double q1, double PwX, double PwY, double PwZ, int verbose)
     {
-        while (a > Math.PI) a -= 2 * Math.PI;
-        while (a <= -Math.PI) a += 2 * Math.PI;
-        return a;
-    }
+        var roots = new List<double>();
+        var q2Min = _minAnglesRad[1];
+        var q2Max = _maxAnglesRad[1];
+        var samples = 31;
+        var step = (q2Max - q2Min) / (samples - 1);
 
-    // --- Tool rotation via RMLib (row-major) ---
-    private static double[,] BuildToolRotationRowMajor(double zx, double zy, double zz, ToolReferenceAxis refAxis)
-    {
-        var primary = refAxis == ToolReferenceAxis.FlangeY
-            ? new RowMeasureUtility.RMLib.Vec3(0, 1, 0)
-            : new RowMeasureUtility.RMLib.Vec3(1, 0, 0);
-        var alt = refAxis == ToolReferenceAxis.FlangeY
-            ? new RowMeasureUtility.RMLib.Vec3(1, 0, 0)
-            : new RowMeasureUtility.RMLib.Vec3(0, 1, 0);
-        return RowMeasureUtility.RMLib.BuildRowMajorFromZ(
-            new RowMeasureUtility.RMLib.Vec3(zx, zy, zz),
-            primary,
-            alt);
-    }
-
-    // --- Classic DH 4x4 (local, to avoid LibD dependency here) ---
-    private static double[,] DHTransform(double theta, double d, double a, double alpha)
-    {
-        double ct = Math.Cos(theta), st = Math.Sin(theta);
-        double ca = Math.Cos(alpha), sa = Math.Sin(alpha);
-        return new double[4, 4]
+        var prevQ = double.NaN;
+        var prevF = double.NaN;
+        for (var i = 0; i < samples; i++)
         {
-            { ct, -st*ca,  st*sa, a*ct },
-            { st,  ct*ca, -ct*sa, a*st },
-            { 0,      sa,     ca,    d },
-            { 0,       0,      0,    1 }
-        };
-    }
+            var q2 = q2Min + i * step;
+            var f = F_q2(q1, q2, PwX, PwY, PwZ);
+            if (i > 0)
+            {
+                if (prevF * f <= 0.0)
+                {
+                    var r = RefineRootSecant(q1, prevQ, q2, PwX, PwY, PwZ);
+                    if (double.IsFinite(r))
+                    {
+                        var fr = F_q2(q1, r, PwX, PwY, PwZ);
+                        if (Math.Abs(fr) < 1e-3)
+                        {
+                            r = RMLib.NormalizeAngleSigned(r);
+                            if (!roots.Any(x => Math.Abs(RMLib.NormalizeAngleSigned(x - r)) < 1e-3))
+                                roots.Add(r);
+                        }
+                    }
+                }
+                else if (Math.Abs(f) < 1e-3)
+                {
+                    if (!roots.Any(x => Math.Abs(RMLib.NormalizeAngleSigned(x - q2)) < 1e-3))
+                        roots.Add(q2);
+                }
+            }
+            prevQ = q2; prevF = f;
 
-    // --- 4x4 multiply ---
-    private static double[,] MatMul4(double[,] A, double[,] B)
-    {
-        var C = new double[4, 4];
-        for (var i = 0; i < 4; i++)
-            for (var j = 0; j < 4; j++)
-                for (var k = 0; k < 4; k++)
-                    C[i, j] += A[i, k] * B[k, j];
-        return C;
-    }
-
-    // --- Homogeneous inverse (rotation orthonormal assumption) ---
-    private static double[,] InvertHomogeneous(double[,] T)
-    {
-        var R = new double[3, 3];
-        for (var r = 0; r < 3; r++)
-            for (var c = 0; c < 3; c++)
-                R[r, c] = T[r, c];
-        // Transpose
-        var Rt = new double[3, 3];
-        for (var r = 0; r < 3; r++)
-            for (var c = 0; c < 3; c++)
-                Rt[r, c] = R[c, r];
-        var p = new[] { T[0, 3], T[1, 3], T[2, 3] };
-        var pInv = new double[3];
-        for (var r = 0; r < 3; r++)
-            pInv[r] = -(Rt[r, 0] * p[0] + Rt[r, 1] * p[1] + Rt[r, 2] * p[2]);
-        var Inv = new double[4, 4];
-        for (var r = 0; r < 3; r++)
-        {
-            Inv[r, 0] = Rt[r, 0]; Inv[r, 1] = Rt[r, 1]; Inv[r, 2] = Rt[r, 2]; Inv[r, 3] = pInv[r];
+            if (verbose >= 2)
+                Console.WriteLine($"   sample q2={q2 * 180 / Math.PI:F3} f={f:F6}");
         }
-        Inv[3, 0] = 0; Inv[3, 1] = 0; Inv[3, 2] = 0; Inv[3, 3] = 1;
-        return Inv;
+
+        if (verbose >= 2 && roots.Count > 0)
+            Console.WriteLine("   q2 roots(deg): " + string.Join(", ", roots.Select(r => (r * 180.0 / Math.PI).ToString("F3"))));
+        return roots;
     }
 
-    // --- Cross product (double[] size 3) ---
-    private static double[] Cross3(double[] a, double[] b) =>
-        [
-            a[1]*b[2] - a[2]*b[1],
-            a[2]*b[0] - a[0]*b[2],
-            a[0]*b[1] - a[1]*b[0]
-        ];
-
-    // --- Transpose generic matrix ---
-    private static double[,] Transpose(double[,] M)
+    // f(q2) 定義を修正
+    private double F_q2(double q1, double q2, double PwX, double PwY, double PwZ)
     {
-        var rows = M.GetLength(0);
-        var cols = M.GetLength(1);
-        var T = new double[cols, rows];
-        for (var r = 0; r < rows; r++)
-            for (var c = 0; c < cols; c++)
-                T[c, r] = M[r, c];
-        return T;
+        var W2 = ComputeW2(q1, q2, PwX, PwY, PwZ);
+        var d4 = _mdh.D[3];
+        return W2[1] + d4;    // ← W2[1] (Y成分) に変更
     }
 
-    // --- Matrix-vector multiply ---
-    private static double[] MatVecMul(double[,] M, double[] v)
+    private double[] ComputeW2(double q1, double q2, double PwX, double PwY, double PwZ)
     {
-        var rows = M.GetLength(0);
-        var cols = M.GetLength(1);
-        var r = new double[rows];
-        for (var i = 0; i < rows; i++)
-            for (var j = 0; j < cols; j++)
-                r[i] += M[i, j] * v[j];
-        return r;
+        var a = _mdh.A; var d = _mdh.D; var off = _mdh.Offset; var alpha = _mdh.Alpha;
+        var T01 = RMLib.DHTransform(q1 + off[0], d[0], a[0], alpha[0]);
+        var T12 = RMLib.DHTransform(q2 + off[1], d[1], a[1], alpha[1]);
+        var T02 = RMLib.MatMul4x4(T01, T12);
+
+        double O2x = T02[0, 3], O2y = T02[1, 3], O2z = T02[2, 3];
+        double[] X2 = { T02[0, 0], T02[1, 0], T02[2, 0] };
+        double[] Y2 = { T02[0, 1], T02[1, 1], T02[2, 1] };
+        double[] Z2 = { T02[0, 2], T02[1, 2], T02[2, 2] };
+
+        var Wx = PwX - O2x;
+        var Wy = PwY - O2y;
+        var Wz = PwZ - O2z;
+
+        var vx = Wx * X2[0] + Wy * X2[1] + Wz * X2[2];
+        var vy = Wx * Y2[0] + Wy * Y2[1] + Wz * Y2[2];
+        var vz = Wx * Z2[0] + Wy * Z2[1] + Wz * Z2[2];
+        return new[] { vx, vy, vz };
+    }
+
+    private double RefineRootSecant(double q1, double q2a, double q2b,
+                                    double PwX, double PwY, double PwZ,
+                                    int maxIter = 25, double tol = 1e-8)
+    {
+        var fa = F_q2(q1, q2a, PwX, PwY, PwZ);
+        var fb = F_q2(q1, q2b, PwX, PwY, PwZ);
+        double a0 = q2a, b0 = q2b;
+        for (var i = 0; i < maxIter; i++)
+        {
+            if (Math.Abs(fb - fa) < 1e-14) break;
+            var c = b0 - fb * (b0 - a0) / (fb - fa);
+            var fc = F_q2(q1, c, PwX, PwY, PwZ);
+            a0 = b0; fa = fb;
+            b0 = c; fb = fc;
+            if (Math.Abs(fc) < tol) return c;
+        }
+        return b0;
+    }
+
+    // ======== Utility ========
+    private bool WithinLimit(int idx, double valRad) =>
+        valRad >= _minAnglesRad[idx] && valRad <= _maxAnglesRad[idx];
+
+    private bool WithinLimits(double[] q)
+    {
+        for (var i = 0; i < 6; i++)
+            if (!WithinLimit(i, q[i])) return false;
+        return true;
+    }
+
+    private static bool IsDuplicate(List<double[]> sols, double[] cand, double tol)
+    {
+        foreach (var s in sols)
+        {
+            double sum = 0;
+            for (var i = 0; i < 6; i++)
+            {
+                var d = RMLib.NormalizeAngleSigned(s[i] - cand[i]);
+                sum += d * d;
+            }
+            if (sum < tol * tol) return true;
+        }
+        return false;
+    }
+
+    private static bool PoseMatch(double[,] A, double[,] B, double posTol = 1e-3, double angTol = 1e-3)
+    {
+        var dp =
+            (A[0, 3] - B[0, 3]) * (A[0, 3] - B[0, 3]) +
+            (A[1, 3] - B[1, 3]) * (A[1, 3] - B[1, 3]) +
+            (A[2, 3] - B[2, 3]) * (A[2, 3] - B[2, 3]);
+        if (dp > posTol * posTol) return false;
+
+        var tr =
+            A[0, 0] * B[0, 0] + A[1, 0] * B[1, 0] + A[2, 0] * B[2, 0] +
+            A[0, 1] * B[0, 1] + A[1, 1] * B[1, 1] + A[2, 1] * B[2, 1] +
+            A[0, 2] * B[0, 2] + A[1, 2] * B[1, 2] + A[2, 2] * B[2, 2];
+
+        var cosAng = (tr - 1.0) * 0.5;
+        cosAng = Math.Clamp(cosAng, -1.0, 1.0);
+        var ang = Math.Acos(cosAng);
+        return ang < angTol;
     }
 }

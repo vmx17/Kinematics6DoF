@@ -28,7 +28,7 @@ public class CMLib
     /// <summary>
     /// 4x4同次変換行列の逆行列を計算します。
     /// </summary>
-    internal static double[,] MatrixInverse(double[,] T_matrix)
+    internal static double[,] MatrixInverse4x4(double[,] T_matrix)
     {
         var inv = new double[4, 4];
 
@@ -180,7 +180,7 @@ public class CMLib
     /// <summary>
     /// 単位行列を生成します。
     /// </summary>
-    internal static double[,] Identity()
+    internal static double[,] Identity4x4()
     {
         return new double[,]
         {
@@ -224,7 +224,7 @@ public class CMLib
             new Vec3(M.Xaxis.Z, M.Yaxis.Z, M.Zaxis.Z)
         );
 
-    internal static Mat3 Multiply(Mat3 A, Mat3 B)
+    internal static Mat3 Multiply3x3(Mat3 A, Mat3 B)
     {
         Vec3 Mul(Vec3 v) => new(
             A.Xaxis.X * v.X + A.Yaxis.X * v.Y + A.Zaxis.X * v.Z,
@@ -241,4 +241,12 @@ public class CMLib
 
     internal static double Norm(Vec3 v) =>
         Math.Sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z);
+
+
+    internal static double NormalizeAngle(double angle)
+    {
+        while (angle > Math.PI) angle -= 2 * Math.PI;
+        while (angle <= -Math.PI) angle += 2 * Math.PI;
+        return angle;
+    }
 }

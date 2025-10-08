@@ -2,17 +2,35 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Kinematics2;
+namespace KinematicsCM;
 
 // MDH parameter container
 public class MDHParameters
 {
-    public double[] Alpha { get; }
-    public double[] A { get; }
-    public double[] D { get; }
-    public double[] Offset { get; }
-    public double[] MinAnglesDeg { get; } // Joint limits in degrees
-    public double[] MaxAnglesDeg { get; } // Joint limits in degrees
+    public double[] Alpha
+    {
+        get;
+    }
+    public double[] A
+    {
+        get;
+    }
+    public double[] D
+    {
+        get;
+    }
+    public double[] Offset
+    {
+        get;
+    }
+    public double[] MinAnglesDeg
+    {
+        get;
+    } // Joint limits in degrees
+    public double[] MaxAnglesDeg
+    {
+        get;
+    } // Joint limits in degrees
 
     public MDHParameters(double[] alpha, double[] a, double[] d, double[] offset, double[]? minAngles = null, double[]? maxAngles = null)
     {
@@ -46,10 +64,10 @@ public static class ManipulatorFactory
         )
     };
 
-    // ツール名とツール情報のマッピング (位置 ＋ ベクトルonTool座標)
+    // ツール名とツール情報のマッピング
     private static readonly Dictionary<string, double[]> _toolTable = new(StringComparer.OrdinalIgnoreCase)
     {
-        // "null" = [tx, ty, tz, vx, vy, vz] (vx,vy,vz is Z-axis vector)
+        // "null" = [tx, ty, tz, zx, zy, zz] (zx,zy,zz is Z-axis vector)
         ["null"] = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
         // "test0" = 45deg rotation around Y-axis
         ["tool0"] = [1.41421356, 0.0, 2.41421356, 0.70710678, 0.0, 0.70710678]
@@ -103,18 +121,6 @@ public class Manipulator6DoF
 
     private static readonly double Deg2Rad = Math.PI / 180.0;
 
-    // === Added enum (place near other type-level declarations if desired) ===
-    public enum ToolReferenceAxis
-    {
-        // フランジ座標と、ツール座標のZ軸方向は一致させる前提で、残り2軸のいずれをプライマリリファレンス人するかを選択する。FlangeYを選択すると、現状、フランジ座標とツール座標の向きは同じとなる。FlangeXを選ぶとフランジ座標Z軸回りに90度回転したものがツール座標になる。
-        // Use flange Y axis as primary reference (classic behavior but now via projection)
-        FlangeY = 0,
-        // Use flange X axis as primary reference
-        FlangeX = 1
-    }
-
-    private ToolReferenceAxis _toolRefAxis = ToolReferenceAxis.FlangeY;
-
     public Manipulator6DoF(MDHParameters mdh, double[] tool)
     {
         if (tool == null || tool.Length != 6)
@@ -126,8 +132,6 @@ public class Manipulator6DoF
         _minAnglesRad = _mdh.MinAnglesDeg.Select(a => a * Deg2Rad).ToArray();
         _maxAnglesRad = _mdh.MaxAnglesDeg.Select(a => a * Deg2Rad).ToArray();
     }
-
-    public void SetToolReferenceAxis(ToolReferenceAxis axis) => _toolRefAxis = axis;
 
     public double[,] Forward(double[] q, int verbose = 0)
     {
@@ -141,7 +145,7 @@ public class Manipulator6DoF
         var origins = new double[7][];
         var axes = new double[7][,];
 
-        origins[0] = [0, 0, 0];
+        origins[0] = new double[] { 0, 0, 0 };
         axes[0] = new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
         for (var i = 0; i < 6; i++)
@@ -192,11 +196,9 @@ public class Manipulator6DoF
         T06_flange[3, 0] = 0; T06_flange[3, 1] = 0; T06_flange[3, 2] = 0; T06_flange[3, 3] = 1;
 
         double xt = _tool[0], yt = _tool[1], zt = _tool[2];
-        double vx = _tool[3], vy = _tool[4], vz = _tool[5];
+        double zx = _tool[3], zy = _tool[4], zz = _tool[5];
 
-        var R_tool = GetToolRotationMatrixFromZVector(
-            vx, vy, vz,
-            referenceAxis: _toolRefAxis);
+        var R_tool = GetToolRotationMatrixFromZVector(zx, zy, zz);
 
         var T6_tool = new double[4, 4];
         for (var row = 0; row < 3; row++)
@@ -216,7 +218,7 @@ public class Manipulator6DoF
             Console.WriteLine("---- Origins (absolute coords) ----");
             for (var i = 0; i <= 6; i++)
                 Console.WriteLine($"O{i}: ({origins[i][0]:F3}, {origins[i][1]:F3}, {origins[i][2]:F3})");
-            Console.WriteLine($"Ot: ({T0_tool[0, 3]:F3}, {T0_tool[1, 3]:F3}, {T0_tool[2, 3]:F3})");
+            Console.WriteLine($"O_tool: ({T0_tool[0, 3]:F3}, {T0_tool[1, 3]:F3}, {T0_tool[2, 3]:F3})");
         }
 
         if (verbose >= 2)
@@ -239,7 +241,7 @@ public class Manipulator6DoF
         return T0_tool;
     }
 
-    public double[][] InverseGeometric(double[,] T_target, out bool[] flags, int verbose = 0)
+    public double[][] Inverse(double[,] T_target, out bool[] flags, int verbose = 0)
     {
         var solutions = new double[8][];
         for (var i = 0; i < 8; i++) solutions[i] = new double[6];
@@ -247,8 +249,8 @@ public class Manipulator6DoF
         var verboseOutputDone = false;
 
         double xt = _tool[0], yt = _tool[1], zt = _tool[2];
-        double vx = _tool[3], vy = _tool[4], vz = _tool[5];
-        var R_tool = GetToolRotationMatrixFromZVector(vx, vy, vz);
+        double zx = _tool[3], zy = _tool[4], zz = _tool[5];
+        var R_tool = GetToolRotationMatrixFromZVector(zx, zy, zz);
         var T_tool = new double[4, 4];
         for (var row = 0; row < 3; row++)
             for (var col = 0; col < 3; col++)
@@ -256,7 +258,7 @@ public class Manipulator6DoF
         T_tool[0, 3] = xt; T_tool[1, 3] = yt; T_tool[2, 3] = zt;
         T_tool[3, 3] = 1;
 
-        var T_tool_inv = ColumnMeasureUtility.CMLib.MatrixInverse(T_tool);
+        var T_tool_inv = ColumnMeasureUtility.CMLib.MatrixInverse4x4(T_tool);
         var T_target_flange = ColumnMeasureUtility.CMLib.MatMul4x4(T_target, T_tool_inv);
 
         var a = _mdh.A;
@@ -322,7 +324,7 @@ public class Manipulator6DoF
             var T12 = ColumnMeasureUtility.CMLib.T(t2 + offset[1], d[1], a[1], _mdh.Alpha[1]);
             var T23 = ColumnMeasureUtility.CMLib.T(t3 + offset[2], d[2], a[2], _mdh.Alpha[2]);
             var T03 = ColumnMeasureUtility.CMLib.MatMul4x4(ColumnMeasureUtility.CMLib.MatMul4x4(T01, T12), T23);
-            var T03_inv = ColumnMeasureUtility.CMLib.MatrixInverse(T03);
+            var T03_inv = ColumnMeasureUtility.CMLib.MatrixInverse4x4(T03);
             var T36 = ColumnMeasureUtility.CMLib.MatMul4x4(T03_inv, T_target_flange);
 
             var cos_t5 = T36[1, 2];
@@ -371,7 +373,7 @@ public class Manipulator6DoF
                     flags[sol_idx] = true;
                     if (verbose == 1 && !verboseOutputDone)
                     {
-                        Console.WriteLine("\n--- InverseGeometric Kinematics (Geometric) Debug Output ---");
+                        Console.WriteLine("\n--- InverseGeometric KinematicsCM (Geometric) Debug Output ---");
                         Forward(solutions[sol_idx], 1);
                         verboseOutputDone = true;
                     }
@@ -385,8 +387,8 @@ public class Manipulator6DoF
     public double[] InverseJacobian(double[,] T_target, double[] q_initial, out bool success, int maxIterations = 1000, double tolerance = 1e-6, double alpha = 0.1, int verbose = 0)
     {
         double xt = _tool[0], yt = _tool[1], zt = _tool[2];
-        double vx = _tool[3], vy = _tool[4], vz = _tool[5];
-        var R_tool = GetToolRotationMatrixFromZVector(vx, vy, vz);
+        double zx = _tool[3], zy = _tool[4], zz = _tool[5];
+        var R_tool = GetToolRotationMatrixFromZVector(zx, zy, zz);
         var T_tool = new double[4, 4];
         for (var row = 0; row < 3; row++)
             for (var col = 0; col < 3; col++)
@@ -394,7 +396,7 @@ public class Manipulator6DoF
         T_tool[0, 3] = xt; T_tool[1, 3] = yt; T_tool[2, 3] = zt;
         T_tool[3, 3] = 1;
 
-        var T_tool_inv = ColumnMeasureUtility.CMLib.MatrixInverse(T_tool);
+        var T_tool_inv = ColumnMeasureUtility.CMLib.MatrixInverse4x4(T_tool);
         var T_target_flange = ColumnMeasureUtility.CMLib.MatMul4x4(T_target, T_tool_inv);
 
         var q = (double[])q_initial.Clone();
@@ -427,7 +429,7 @@ public class Manipulator6DoF
                 success = true;
                 if (verbose == 1)
                 {
-                    Console.WriteLine("\n--- InverseGeometric Kinematics (Jacobian) Debug Output ---");
+                    Console.WriteLine("\n--- InverseGeometric KinematicsCM (Jacobian) Debug Output ---");
                     Forward(q, 1);
                 }
                 return q;
@@ -505,110 +507,48 @@ public class Manipulator6DoF
         return angle;
     }
 
-    // Backward compatible overload (old signature). Uses FlangeY as default primary reference.
-    // NOTE: Left for existing calls in InverseGeometric / InverseJacobian that have not yet been updated.
-    // Prefer calling the 4-parameter version with an explicit ToolReferenceAxis when possible.
     private static double[,] GetToolRotationMatrixFromZVector(double zx, double zy, double zz)
-        => GetToolRotationMatrixFromZVector(zx, zy, zz, ToolReferenceAxis.FlangeY);
-
-    /// <summary>
-    /// Build a tool rotation matrix from a supplied Z direction (tool approach) expressed in the
-    /// flange frame. Instead of hard-coded up vectors (0,1,0) / (1,0,0), we:
-    /// 1. Pick a reference flange axis (Y or X) per configuration.
-    /// 2. Project that reference axis onto the plane perpendicular to Z to define X (roll = 0).
-    /// 3. If projection degenerates, fall back to the other flange axis, then finally a static fallback.
-    /// 4. Compute Y = Z × X.
-    /// Returns a 3x3 rotation whose columns are (X, Y, Z) in flange coordinates.
-    /// </summary>
-    private static double[,] GetToolRotationMatrixFromZVector(
-        double zx, double zy, double zz,
-        ToolReferenceAxis referenceAxis)
     {
-        // 1. Normalize Z
-        var n = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        if (n < 1e-12)
+        var zAxis = new[] { zx, zy, zz };
+        var zNorm = Math.Sqrt(zx * zx + zy * zy + zz * zz);
+        if (zNorm < 1e-9)
         {
-            // Degenerate: return identity (flange axes)
-            return new double[3, 3] {
-                { 1, 0, 0 },
-                { 0, 1, 0 },
-                { 0, 0, 1 }
-            };
+            // Zero vector, return identity
+            return new double[3, 3] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
         }
-        double Zx = zx / n, Zy = zy / n, Zz = zz / n;
+        zAxis[0] /= zNorm; zAxis[1] /= zNorm; zAxis[2] /= zNorm;
 
-        // 2. Select primary reference axis (in flange frame these are canonical unit vectors)
-        //    We keep code general in case you later pre-transform them.
-        var refA = referenceAxis == ToolReferenceAxis.FlangeY
-            ? [0.0, 1.0, 0.0] // Flange Y
-            : new[] { 1.0, 0.0, 0.0 }; // Flange X
+        double[] xAxis;
+        double[] yAxis;
 
-        // 3. Project refA onto plane orthogonal to Z: Xcand = refA - (refA·Z)Z
-        var dotRefZ = refA[0] * Zx + refA[1] * Zy + refA[2] * Zz;
-        var Xcx = refA[0] - dotRefZ * Zx;
-        var Xcy = refA[1] - dotRefZ * Zy;
-        var Xcz = refA[2] - dotRefZ * Zz;
+        var upVec = new[] { 0.0, 1.0, 0.0 }; // Flange's Y-axis as reference
 
-        var xn = Math.Sqrt(Xcx * Xcx + Xcy * Xcy + Xcz * Xcz);
+        // Manual dot product calculation
+        var dotProduct = zAxis[0] * upVec[0] + zAxis[1] * upVec[1] + zAxis[2] * upVec[2];
 
-        if (xn < 1e-9)
+        if (Math.Abs(dotProduct) > 0.9999)
         {
-            // 4. Fallback to the other flange axis
-            var alt = referenceAxis == ToolReferenceAxis.FlangeY
-                ? [1.0, 0.0, 0.0]
-                : new[] { 0.0, 1.0, 0.0 };
+            var altUpVec = new[] { 1.0, 0.0, 0.0 }; // Use X-axis if Z is aligned with Y
+            xAxis = ColumnMeasureUtility.CMLib.CrossProduct(altUpVec, zAxis);
+            var xNorm = Math.Sqrt(xAxis[0] * xAxis[0] + xAxis[1] * xAxis[1] + xAxis[2] * xAxis[2]);
+            xAxis[0] /= xNorm; xAxis[1] /= xNorm; xAxis[2] /= xNorm;
 
-            var dotAltZ = alt[0] * Zx + alt[1] * Zy + alt[2] * Zz;
-            Xcx = alt[0] - dotAltZ * Zx;
-            Xcy = alt[1] - dotAltZ * Zy;
-            Xcz = alt[2] - dotAltZ * Zz;
-            xn = Math.Sqrt(Xcx * Xcx + Xcy * Xcy + Xcz * Xcz);
+            yAxis = ColumnMeasureUtility.CMLib.CrossProduct(zAxis, xAxis);
+        }
+        else
+        {
+            xAxis = ColumnMeasureUtility.CMLib.CrossProduct(upVec, zAxis);
+            var xNorm = Math.Sqrt(xAxis[0] * xAxis[0] + xAxis[1] * xAxis[1] + xAxis[2] * xAxis[2]);
+            xAxis[0] /= xNorm; xAxis[1] /= xNorm; xAxis[2] /= xNorm;
 
-            if (xn < 1e-9)
-            {
-                // 5. Final static fallback (choose a vector not parallel to Z)
-                var staticAlt = Math.Abs(Zz) < 0.9
-                    ? [0.0, 0.0, 1.0]
-                    : new[] { 0.0, 1.0, 0.0 };
-                var dotStatic = staticAlt[0] * Zx + staticAlt[1] * Zy + staticAlt[2] * Zz;
-                Xcx = staticAlt[0] - dotStatic * Zx;
-                Xcy = staticAlt[1] - dotStatic * Zy;
-                Xcz = staticAlt[2] - dotStatic * Zz;
-                xn = Math.Sqrt(Xcx * Xcx + Xcy * Xcy + Xcz * Xcz);
-
-                if (xn < 1e-12)
-                {
-                    // If still degenerate, return identity
-                    return new double[3, 3] {
-                        { 1, 0, 0 },
-                        { 0, 1, 0 },
-                        { 0, 0, 1 }
-                    };
-                }
-            }
+            yAxis = ColumnMeasureUtility.CMLib.CrossProduct(zAxis, xAxis);
         }
 
-        // Normalize X
-        double Xx = Xcx / xn, Xy = Xcy / xn, Xz = Xcz / xn;
-
-        // 6. Y = Z × X
-        var Yx = Zy * Xz - Zz * Xy;
-        var Yy = Zz * Xx - Zx * Xz;
-        var Yz = Zx * Xy - Zy * Xx;
-
-        // (Optional) Normalize Y for numerical safety
-        var yn = Math.Sqrt(Yx * Yx + Yy * Yy + Yz * Yz);
-        if (yn > 1e-12)
-        {
-            Yx /= yn; Yy /= yn; Yz /= yn;
-        }
-
-        // 7. Return rotation with columns (X,Y,Z)
         return new double[3, 3]
         {
-            { Xx, Yx, Zx },
-            { Xy, Yy, Zy },
-            { Xz, Yz, Zz }
+            { xAxis[0], yAxis[0], zAxis[0] },
+            { xAxis[1], yAxis[1], zAxis[1] },
+            { xAxis[2], yAxis[2], zAxis[2] }
         };
     }
 }
