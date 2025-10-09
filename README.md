@@ -1,4 +1,4 @@
-v# Manipulator Kinematics
+# Manipulator Kinematics
 
 This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.
 The implementation is in C#.
@@ -52,7 +52,7 @@ $$
 $$
 
 *Please note the distinction between $a$ and $\alpha$. The usage of these symbols follows conventional practice.  
-*The order of this matrix multiplication formula may vary in code. When applying matrices to a vector, the order is $RotX, TransX, RotZ, TransZ$, so the formula is $newVector = TransZ \times RotZ \times TransX \times RotX \times Vector$. Depending on the library or struct definition (column-major or row-major), additional matrix operations may be needed. The "$\rightarrow$" indicates the order of translation, not matrix multiplication "$\times$". The strict transformation sequence is as follows.
+*The order of this matrix multiplication formula may vary in code. When applying matrices to a vector, the order is $RotX, TransX, RotZ, TransZ$, so the formula is $newVector = TransZ \times RotZ \times TransX \times RotX \times Vector$. Depending on the library or struct definition (column-major or row-major), additional matrix operations may be needed. The $"\rightarrow"$ indicates the order of translation, not matrix multiplication $"\times"$. The strict transformation sequence is as follows.
 
 The $^{i-1}T_i$ transformation is performed in the following sequence:
 
@@ -84,10 +84,10 @@ In the following table, $\overrightarrow{Z_i}$ and $\overrightarrow{X_i}$ denote
 |6|$\frac{\pi}{2}$|0|$\theta_6$|24.29|(0,0,-1)|(1,0,0)|
 
 where,  
-a: link length (length of the common normal line)  
-α: twisted (link) angle  
-θ: rotation around the local Z axis (joint angle), with possible offset values defined separately.  
-d: link offset (distance between the feet of the two common perpendiculars on the joint)  
+$a$: link length (length of the common normal line)  
+$α$: twisted (link) angle  
+$\theta$: rotation around the local Z axis (joint angle), with possible offset values defined separately.  
+$d$: link offset (distance between the feet of the two common perpendiculars on the joint)  
 
 *These parameters comes from WLKATA MiRobot, an RTTRTR 6DoF mini manipulator but directions of each local axis are NOT according to it.
 
@@ -98,16 +98,25 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 </div>
 <br>
 
+|L|$\alpha_{i-1}$|$a_{i-1}$|$offset+\theta_i$|$d_i$|$\overrightarrow{Z_i}$|$\overrightarrow{X_i}$|
+|---|---:|---:|---:|---:|---|---|
+|1|0|0|$\theta_1$|127|(0,0,1)|(1,0,0)|
+|2|$\frac{\pi}{2}$|29.69|$\frac{\pi}{2} + \theta_2$|0|(0,-1,0)|(0,0,1)|
+|3|0|108|$-\frac{\pi}{2}+\theta_3$|0|(0,-1,0)|(1,0,0)|
+|4|$\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|-20|(0,0,-1)|(-1,0,0)|
+|5|$\frac{\pi}{2}$|0|$\theta_5$|0|(0,-1,0)|(-1,0,0)|
+|6|$-\frac{\pi}{2}$|0|$\theta_6$|24.29|(0,0,-1)|(1,0,0)|
+
 --- Design of Frame Origins ($^0T_{tcp}$) ---  
 |frame|position on absolute space|Local axis verctor on absolute space|
 |---|---|---|
-|O0 (Fixed base)|(0, 0, 0)|fixed axis, just defines location and direction of the robot base. X0:(1,0,0), Y0:(0,1,0), Z0:(0,0,1)|
-|O1 (Joint 1 origin)|(0.000, 0, 127.000)|X1:(1,0,0), Y1:(0,1,0), Z1:(0,0,1)|
-|O2 (Joint 2 origin)|(29.690, 0, 127.000)|X2:(0,0,1), Y2:(-1,0,0), Z2:(0,-1,0)|
-|O3 (Joint 3 origin)|(29.690, 0, 127+108)|X3:(0,0,1), Y3:(1,0,0), Z3:(0,1,0)|
-|O4 (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
-|O5 (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
-|O6 (Joint 6 origin), Ot|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1) This is as same as (Xt, Yt, Zt).|
+|$O_0$ (Fixed base)|(0, 0, 0)|fixed axis, just defines location and direction of the robot base. X0:(1,0,0), Y0:(0,1,0), Z0:(0,0,1)<br>This is as same as absolute (world) axis, assumed.|
+|$O_1$ (Joint 1 origin)|(0.000, 0, 127.000)|X1:(1,0,0), Y1:(0,1,0), Z1:(0,0,1)|
+|$O_2$ (Joint 2 origin)|(29.690, 0, 127.000)|X2:(0,0,1), Y2:(-1,0,0), Z2:(0,-1,0)|
+|$O_3$ (Joint 3 origin)|(29.690, 0, 127+108)|X3:(0,0,1), Y3:(1,0,0), Z3:(0,1,0)|
+|$O_4$ (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
+|$O_5$ (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
+|$O_6$ (Joint 6 origin), $O_t$|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1)<br>This is as same as $(X_t, Y_t, Z_t)$.|
 |Otcp (TCP)|(depends on "TCP position and vector" given at instance of robot.)|$Z_{tcp}$ is the direction of TCP.|
 
 "initial posture" means all joint angles $\theta_i = 0$ and equips "null" tool, $(Xt, Yt, Zt, vxt, vyt, vzt) = (0,0,0,0,0,1)$, which is the "TCP position and vector" in $\varSigma_t$.  
@@ -115,10 +124,16 @@ Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip"
 
 ### Forward Kinematics (FK)
 The MDH is sufficient for Forward Kinematics. The transformation from the absolute coordinate system to the TCP coordinate system are defined completely with the MDH. Remember, this FK includes the TCP position and direction.
+KLib.KinematicsCM.Forward() : based on column major matrix operation
+KLib.KinematicsRM.Forward() : based on row major matrix operation
 
 ### Inverse Kinematics (IK)
-The crank angle between $O_3$ and $O_4$ is the issue for Inverse Kinematics. The fixed crank angle is called "elbow". The crank might be able to remove defining the 4th link is $\overrightarrow{O_3O_4}$ and add some offset angles to $\theta_3$ and $\theta_5$ according to the triangle of $O_3-elbow-O_4$. But, in real world, those offset are not revealed at teaching pendant nor on any robot control languages. Then I want to remove such offset.
+Once I've solved IK by hand. This time is "AI trial" with Gemini and Copilot. It seems difficult for them. They know MDH but there seems special method to define MDH.  
+The 90 degree crank between $O_3$ and $O_4$ is the issue for IK. The fixed crank angle is called "elbow" that oftenly used real industrial manipulators. The crank might be able to remove defining the 4th link is $\overrightarrow{O_3O_4}$ and add some offset angles to $\theta_3$ and $\theta_5$ according to the triangle of $O_3-elbow-O_4$. But, in real world, those offset are not revealed at teaching pendant nor on any robot control languages. Then I want to remove such offset. To do so, I guess the MDH will be changed and need some special calculation for manipulator that have 90-degree crank between 2nd and 3rd joint.
 
 #### Jacobian approach (working)
+KLib.KinematicsCM.InverseJacobian() : based on column major matrix operation
+KLib.KinematicsRM.InverseJacobian() : based on row major matrix operation
+
 #### Geometric approach (under development)
 #### Algebraic approach (not yet)

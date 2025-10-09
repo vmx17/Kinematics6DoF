@@ -44,6 +44,14 @@ public static class ManipulatorFactory
             [0, Math.PI / 2, 0, 0, -Math.PI / 2, 0],
             [-170, -125, -155, -180, -120, -180], // Min Angles [deg]
             [170, 125, 155, 180, 120, 180]  // Max Angles [deg]
+        ),
+        ["MiRobot2"] = new MDHParameters(
+            [0, Math.PI / 2, 0, Math.PI / 2, Math.PI / 2, -Math.PI / 2],
+            [0, 29.69, 108, 168.98, 0, 0],
+            [127, 0, 0, -20, 0, 24.29],
+            [0, Math.PI / 2, -Math.PI / 2, Math.PI, 0 , 0],
+            [-170, -125, -155, -180, -120, -180], // Min Angles [deg]
+            [170, 125, 155, 180, 120, 180]  // Max Angles [deg]
         )
     };
 
