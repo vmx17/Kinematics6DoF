@@ -3,6 +3,9 @@
 This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.
 The implementation is in C#.
 
+## Motivation
+Ah...AI. Copilot and Gemini, sometimes Chat-GPT (almost free plan). I've ever made script to solve Forward and Inverse kinematics of a 6DoF real manipulators. They were a little bit dirty code especialy solve with gegometric approach. Then I thought "Why don't I try to make it clean using AI". The date Iver started this project a few days ago, Oct. 5th, 2025. I felt I should wait one or two years until AI becomes more powerful. But I was too impatient. So I started this project.
+
 ## Status
 
 There is one forward kinematics function and two inverse kinematics (IK) functions are in "KLib" project, a core of this repository.  
@@ -25,7 +28,7 @@ Of course, you can define another type in the code.
 
 Since the system operates in three-dimensional space, transformation equations are primarily structured as products of $4\times4$ matrices. All coordinate systems use a right-handed convention. The sign of rotational angles follows the right-hand rule: when viewed from a positive position along the axis toward the origin, counterclockwise (CCW) rotation is considered positive.  
 
-The space where the robot is installed is called the absolute coordinate system. In the initial posture—where all joint angles $\theta_i$ are zero—the orientation of the absolute coordinate axes is as follows: the forward direction from the robot base corresponds to the positive $X_0$ axis, represented by the vector (1, 0, 0); the upward direction aligns with the $Z_0$ axis, represented by (0, 0, 1); and, due to the right-handed convention, the positive $Y_0$ axis points to the robot's left, represented by (0, 1, 0). For now, the robot is assumed to be positioned at the origin of the absolute coordinate system.
+The space where the robot is installed is called the absolute (or world) coordinate system. In the initial posture—where all joint angles $\theta_i$ are zero—the orientation of the absolute coordinate axes is as follows: the forward direction from the robot base corresponds to the positive $X_0$ axis, represented by the vector (1, 0, 0); the upward direction aligns with the $Z_0$ axis, represented by (0, 0, 1); and, due to the right-handed convention, the positive $Y_0$ axis points to the robot's left, represented by (0, 1, 0). For now, the robot is assumed to be positioned at the origin of the absolute coordinate system.
 
 Joint and link indices start at 0 for the fixed robot base and increment sequentially toward the end-effector: 1, 2, ..., n. Coordinates are expressed as (X, Y, Z), with units in millimeters. Values are rounded to three decimal places for precision. Angular measurements are in radians, but when converted to degrees, values are rounded to four decimal places.
 
@@ -48,8 +51,14 @@ All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate
 The coordinate transformation at each robot axis is given by:
 
 $$
-\boldsymbol{{}^{i-1}T_i = RotX(x_{i-1}, \alpha_{i-1}) \rightarrow TransX(x_{i-1}, a_{i-1}) \rightarrow RotZ(z_i, \theta_i) \rightarrow TransZ(z_i, d_i)}
+\boldsymbol{^{i-1}T_i = RotX(x_{i-1}, \alpha_{i-1}) \rightarrow TransX(x_{i-1}, a_{i-1}) \rightarrow RotZ(z_i, \theta_i) \rightarrow TransZ(z_i, d_i)}
 $$
+Yes, I've realized this is not same with Craig's MDH. It is;
+
+$$
+\boldsymbol{^{i-1}T_i = RotX(x_{i-1}, \alpha_{i-1}) \rightarrow TransX(x_{i-1}, a_{i-1}) \rightarrow RotZ(z_i, \theta_i) \rightarrow TransZ(z_i, d_i)}
+$$
+
 
 *Please note the distinction between $a$ and $\alpha$. The usage of these symbols follows conventional practice.  
 *The order of this matrix multiplication formula may vary in code. When applying matrices to a vector, the order is $RotX, TransX, RotZ, TransZ$, so the formula is $newVector = TransZ \times RotZ \times TransX \times RotX \times Vector$. Depending on the library or struct definition (column-major or row-major), additional matrix operations may be needed. The $"\rightarrow"$ indicates the order of translation, not matrix multiplication $"\times"$. The strict transformation sequence is as follows.
@@ -98,15 +107,6 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 </div>
 <br>
 
-|L|$\alpha_{i-1}$|$a_{i-1}$|$offset+\theta_i$|$d_i$|$\overrightarrow{Z_i}$|$\overrightarrow{X_i}$|
-|---|---:|---:|---:|---:|---|---|
-|1|0|0|$\theta_1$|127|(0,0,1)|(1,0,0)|
-|2|$\frac{\pi}{2}$|29.69|$\frac{\pi}{2} + \theta_2$|0|(0,-1,0)|(0,0,1)|
-|3|0|108|$-\frac{\pi}{2}+\theta_3$|0|(0,-1,0)|(1,0,0)|
-|4|$\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|-20|(0,0,-1)|(-1,0,0)|
-|5|$\frac{\pi}{2}$|0|$\theta_5$|0|(0,-1,0)|(-1,0,0)|
-|6|$-\frac{\pi}{2}$|0|$\theta_6$|24.29|(0,0,-1)|(1,0,0)|
-
 --- Design of Frame Origins ($^0T_{tcp}$) ---  
 |frame|position on absolute space|Local axis verctor on absolute space|
 |---|---|---|
@@ -117,23 +117,52 @@ The initial posture of the robot is defined below. (Lengths are not to scale.)
 |$O_4$ (Joint 4 origin)|(29.690+168.98, 0, 127+108+20)|X4:(0,0,1), Y4:(0,-1,0), Z4:(1,0,0)|
 |$O_5$ (Joint 5 origin)|(29.690+168.98, 0, 127+108+20)|X5:(-1,0,0), Y5:(0,0,1), Z5:(0,1,0)|
 |$O_6$ (Joint 6 origin), $O_t$|(29.690+168.98, 0, 127+108+20-24.29)|X6:(-1,0,0), Y6:(0,1,0), Z6:(0,0,-1)<br>This is as same as $(X_t, Y_t, Z_t)$.|
-|Otcp (TCP)|(depends on "TCP position and vector" given at instance of robot.)|$Z_{tcp}$ is the direction of TCP.|
+|$O_{tcp}$ (TCP)|(depends on "TCP position and vector" given at instance of robot.)|$Z_{tcp}$ is the direction of TCP.|
 
 "initial posture" means all joint angles $\theta_i = 0$ and equips "null" tool, $(Xt, Yt, Zt, vxt, vyt, vzt) = (0,0,0,0,0,1)$, which is the "TCP position and vector" in $\varSigma_t$.  
 Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip". The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
 
 ### Forward Kinematics (FK)
-The MDH is sufficient for Forward Kinematics. The transformation from the absolute coordinate system to the TCP coordinate system are defined completely with the MDH. Remember, this FK includes the TCP position and direction.
-KLib.KinematicsCM.Forward() : based on column major matrix operation
-KLib.KinematicsRM.Forward() : based on row major matrix operation
+
+The MDH is sufficient for Forward Kinematics. The transformation from the absolute coordinate system to the TCP coordinate system are defined completely with the MDH. Remember, this FK includes the TCP position and direction.  
+- KLib.KinematicsCM.Forward() : based on column major matrix operation
+- KLib.KinematicsRM.Forward() : based on row major matrix operation
 
 ### Inverse Kinematics (IK)
+
 Once I've solved IK by hand. This time is "AI trial" with Gemini and Copilot. It seems difficult for them. They know MDH but there seems special method to define MDH.  
+
 The 90 degree crank between $O_3$ and $O_4$ is the issue for IK. The fixed crank angle is called "elbow" that oftenly used real industrial manipulators. The crank might be able to remove defining the 4th link is $\overrightarrow{O_3O_4}$ and add some offset angles to $\theta_3$ and $\theta_5$ according to the triangle of $O_3-elbow-O_4$. But, in real world, those offset are not revealed at teaching pendant nor on any robot control languages. Then I want to remove such offset. To do so, I guess the MDH will be changed and need some special calculation for manipulator that have 90-degree crank between 2nd and 3rd joint.
 
 #### Jacobian approach (working)
-KLib.KinematicsCM.InverseJacobian() : based on column major matrix operation
-KLib.KinematicsRM.InverseJacobian() : based on row major matrix operation
+
+- KLib.KinematicsCM.InverseJacobian() : based on column major matrix operation
+- KLib.KinematicsRM.InverseJacobian() : based on row major matrix operation
 
 #### Geometric approach (under development)
 #### Algebraic approach (not yet)
+
+### Structure of this repository
+
+- KLib : core library project, include kinematics modules
+  - KinematicsRM.cs : kinematics with row-major matrix operation
+  - KinematicsCM.cs : kinematics with column-major matrix operation
+  - KinematicsRM2.cs : kinematics with row-major matrix operation (developing)
+  - KinematicsCM2.cs : kinematics with column-major matrix operation (developing)
+- CheckKLib : console application project, for checking KLib functions
+
+All other projects/codes are under development or test codes.
+
+## 【memo】
+### new MDH trial 1
+
+Input set ($\theta_i$) for FK will be different from above.
+
+|L|$\alpha_{i-1}$|$a_{i-1}$|$offset+\theta_i$|$d_i$|$\overrightarrow{Z_i}$|$\overrightarrow{X_i}$|
+|---|---:|---:|---:|---:|---|---|
+|1|0|0|$\theta_1$|127|(0,0,1)|(1,0,0)|
+|2|$\frac{\pi}{2}$|29.69|$\frac{\pi}{2} + \theta_2$|0|(0,-1,0)|(0,0,1)|
+|3|0|108|$-\frac{\pi}{2}+\theta_3$|0|(0,-1,0)|(1,0,0)|
+|4|$\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|-20|(0,0,-1)|(-1,0,0)|
+|5|$\frac{\pi}{2}$|0|$\theta_5$|0|(0,-1,0)|(-1,0,0)|
+|6|$-\frac{\pi}{2}$|0|$\theta_6$|24.29|(0,0,-1)|(1,0,0)|
