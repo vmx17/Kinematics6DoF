@@ -1,21 +1,24 @@
-# Manipulator Kinematics
+# 6DoF Manipulator Kinematics with a virtual prismatic joint
 
 This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.
 The implementation is in C#.
 
 ## Motivation
-Ah...AI. Copilot and Gemini, sometimes Chat-GPT (almost free plan). I've ever made script to solve Forward and Inverse kinematics of a 6DoF real manipulators. They were a little bit dirty code especialy solve with gegometric approach. Then I thought "Why don't I try to make it clean using AI". The date Iver started this project a few days ago, Oct. 5th, 2025. I felt I should wait one or two years until AI becomes more powerful. But I was too impatient. So I started this project.
+
+Ah...AI. Copilot and Gemini, sometimes Chat-GPT (almost free plan). I've ever made script to solve Forward and Inverse kinematics of a 6DoF real manipulators. Almost of all have a special link that has 90 degree fixed crank. The crank lays between O3 and O4, the origins of local coodinate on robot joints. They were a little bit dirty code especialy solve with geometric approach. Recently, I thought "Why don't I try to make it clean using AI?". The date I've started this project a few days ago, Oct. 5th, 2025. I felt I should wait one or two years until AI becomes more powerful. But I was too impatient. So I started this project.
+
 
 ## Status
 
 There is one forward kinematics function and two inverse kinematics (IK) functions are in "KLib" project, a core of this repository.  
-KLib's forward kinematics and part of inverse (Jacobian) kinematics are working but IK function derived using a geometric approach is still under development.
+KLib's forward kinematics and part of inverse (Jacobian) kinematics are working but IK function derived using a geometric approach is still under development.  
+To solve IK geometrically, I'm trying to find out suitable MDH parameters shown in the last of this documents.
 
 ## Target robot type
 
 This code includes a sample robot: a 6DoF manipulator with joints arranged as Round-Turn-Turn-Round-Turn-Round (RTTRTR). In its initial posture, all link positions have a Y-coordinate of zero. Each joint is rotational, and the joint angle $\theta_i$ serves as the control parameter for the robot's configuration. There are no prismatic (linear) joints. If you're not familiar with designations like "RTTRTR", please refer to the following Fig-1.
 
-<div align="center">
+<div align="center"v
     <img src="./RTTRTR.drawio.svg" alt="Fig-1. What is RTTRTR?" width="400">
     <div>Fig-1. definition of RTTRTR manipulator</div>
 </div>
@@ -28,7 +31,7 @@ Of course, you can define another type in the code.
 
 Since the system operates in three-dimensional space, transformation equations are primarily structured as products of $4\times4$ matrices. All coordinate systems use a right-handed convention. The sign of rotational angles follows the right-hand rule: when viewed from a positive position along the axis toward the origin, counterclockwise (CCW) rotation is considered positive.  
 
-The space where the robot is installed is called the absolute (or world) coordinate system. In the initial posture—where all joint angles $\theta_i$ are zero—the orientation of the absolute coordinate axes is as follows: the forward direction from the robot base corresponds to the positive $X_0$ axis, represented by the vector (1, 0, 0); the upward direction aligns with the $Z_0$ axis, represented by (0, 0, 1); and, due to the right-handed convention, the positive $Y_0$ axis points to the robot's left, represented by (0, 1, 0). For now, the robot is assumed to be positioned at the origin of the absolute coordinate system.
+The space where the robot is installed is called the absolute (or world) coordinate system. In the initial posture—where all joint angles $\theta_i$ are zero, the orientation of the absolute coordinate axes is as follows: the forward direction from the robot base corresponds to the positive $X_0$ axis, represented by the vector (1, 0, 0); the upward direction aligns with the $Z_0$ axis, represented by (0, 0, 1); and, due to the right-handed convention, the positive $Y_0$ axis points to the robot's left, represented by (0, 1, 0). For now, the robot is assumed to be positioned at the origin of the absolute coordinate system.
 
 Joint and link indices start at 0 for the fixed robot base and increment sequentially toward the end-effector: 1, 2, ..., n. Coordinates are expressed as (X, Y, Z), with units in millimeters. Values are rounded to three decimal places for precision. Angular measurements are in radians, but when converted to degrees, values are rounded to four decimal places.
 
@@ -53,11 +56,6 @@ The coordinate transformation at each robot axis is given by:
 $$
 \boldsymbol{^{i-1}T_i = RotX(x_{i-1}, \alpha_{i-1}) \rightarrow TransX(x_{i-1}, a_{i-1}) \rightarrow RotZ(z_i, \theta_i) \rightarrow TransZ(z_i, d_i)}
 $$
-Yes, I've realized this is not same with Craig's MDH. It is;
-
-$$
-\boldsymbol{^{i-1}T_i = RotX(x_{i-1}, \alpha_{i-1}) \rightarrow TransX(x_{i-1}, a_{i-1}) \rightarrow RotZ(z_i, \theta_i) \rightarrow TransZ(z_i, d_i)}
-$$
 
 
 *Please note the distinction between $a$ and $\alpha$. The usage of these symbols follows conventional practice.  
@@ -73,7 +71,8 @@ The $^{i-1}T_i$ transformation is performed in the following sequence:
 The expression can be abbreviated as follows:
 
 $$
-\boldsymbol{^{i-1}T_i = RotX_{i-1} \rightarrow TransX_{i-1} \rightarrow RotZ_i \rightarrow TransZ_i}
+\boldsymbol{
+^{i-1}T_i = RotX_{i-1}(\alpha_{i-1}) \rightarrow TransX_{i-1}(a_{i-1}) \rightarrow RotZ_i(\theta_i) \rightarrow TransZ_i(d_i)}
 $$
 
 The orientation of the robot base coordinate system is aligned with the absolute coordinate axes as described above, and the robot base is assumed to be placed at the origin of the absolute coordinate system.
@@ -154,9 +153,7 @@ The 90 degree crank between $O_3$ and $O_4$ is the issue for IK. The fixed crank
 All other projects/codes are under development or test codes.
 
 ## 【memo】
-### new MDH trial 1
-
-Input set ($\theta_i$) for FK will be different from above.
+### new MDH trial : MiRobot2
 
 |L|$\alpha_{i-1}$|$a_{i-1}$|$offset+\theta_i$|$d_i$|$\overrightarrow{Z_i}$|$\overrightarrow{X_i}$|
 |---|---:|---:|---:|---:|---|---|
@@ -166,3 +163,30 @@ Input set ($\theta_i$) for FK will be different from above.
 |4|$\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|-20|(0,0,-1)|(-1,0,0)|
 |5|$\frac{\pi}{2}$|0|$\theta_5$|0|(0,-1,0)|(-1,0,0)|
 |6|$-\frac{\pi}{2}$|0|$\theta_6$|24.29|(0,0,-1)|(1,0,0)|
+
+### new MDH trial : MiRobot3
+
+- α [deg]: [0, +90, 0, +90, 0, 0]  → code uses radians
+- a: [0.0, 29.69, 108.0, 168.98, 0.0, 0.0]
+- d: [127.0, 0.0, 0.0, 20.0, 0.0, −24.29]
+- θ: [θ1, θ2, θ3, 0, θ5, θ6]  // joint 4 prismatic fixed
+
+|L|$\alpha_{i-1}$|$a_{i-1}$|$offset+\theta_i$|$d_i$|$\overrightarrow{Z_i}$|$\overrightarrow{X_i}$|
+|---|---:|---:|---:|---:|---|---|
+|0|-|0|0|0|(0,0,1)|(1,0,0)|
+|1|0|0|$\theta_1$|127|(0,0,1)|(1,0,0)|
+|2|$\frac{\pi}{2}$|29.69|$\frac{\pi}{2} + \theta_2$|0|(0,-1,0)|(0,0,1)|
+|3|0|108|$-\frac{\pi}{2}+\theta_3$|0|(0,-1,0)|(1,0,0)|
+|e|$\frac{\pi}{2}$|0|0|-20|(0,0,-1)|(1,0,0)|
+|4|$-\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|0|(0,-1,0)|(-1,0,0)|
+|5|$-\frac{\pi}{2}$|0|$\theta_5$|0|(0,0,-1)|(-1,0,0)|
+|6|0|0|$\theta_6$|24.29|(0,0,-1)|(-1,0,0)|
+
+'e' is "elbow", a virtual prismatic joint that has fixed length.
+'0' is location and direction of the robot base, on absolute frame.
+
+<div align="center">
+    <img src="./MiRobot3.drawio.svg" alt="Fig-3. Local Coodinate System for 6Dof Manipulator" width="400">
+    <div>Fig-3. local coodinate system of target manipulator (not include end-effector)</div>
+</div>
+<br>

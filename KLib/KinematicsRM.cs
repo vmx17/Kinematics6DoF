@@ -271,8 +271,8 @@ public class Manipulator6DoF
                 var T01 = RMLib.DHTransform(q1 + off[0], d[0], a[0], _mdh.Alpha[0]);
                 var T12 = RMLib.DHTransform(q2 + off[1], d[1], a[1], _mdh.Alpha[1]);
                 var T23 = RMLib.DHTransform(q3 + off[2], d[2], a[2], _mdh.Alpha[2]);
-                var T03 = RMLib.MatMul4x4(RMLib.MatMul4x4(T01, T12), T23);
-                var T36 = RMLib.MatMul4x4(RMLib.InvertHomogeneous4x4(T03), T_target);
+                var T03 = Math4.MatMul(Math4.MatMul(T01, T12), T23);
+                var T36 = Math4.MatMul(RMLib.InvertHomogeneous4x4(T03), T_target);
 
                 var cos_q5 = T36[1, 2];
                 if (cos_q5 < -1 || cos_q5 > 1) continue;
@@ -307,11 +307,11 @@ public class Manipulator6DoF
                         var T45d = RMLib.DHTransform(q5 + off[4], d[4], a[4], _mdh.Alpha[4]);
                         var T56d = RMLib.DHTransform(q6 + off[5], d[5], a[5], _mdh.Alpha[5]);
 
-                        var T02d = RMLib.MatMul4x4(T01d, T12d);
-                        var T03d = RMLib.MatMul4x4(T02d, T23d);
-                        var T04d = RMLib.MatMul4x4(T03d, T34d);
-                        var T05d = RMLib.MatMul4x4(T04d, T45d);
-                        var T06d = RMLib.MatMul4x4(T05d, T56d);
+                        var T02d = Math4.MatMul(T01d, T12d);
+                        var T03d = Math4.MatMul(T02d, T23d);
+                        var T04d = Math4.MatMul(T03d, T34d);
+                        var T05d = Math4.MatMul(T04d, T45d);
+                        var T06d = Math4.MatMul(T05d, T56d);
 
                         double[] O2dbg = { T02d[0, 3], T02d[1, 3], T02d[2, 3] };
                         double[] O3dbg = { T03d[0, 3], T03d[1, 3], T03d[2, 3] };
@@ -410,8 +410,8 @@ public class Manipulator6DoF
             }
 
             var J = CalculateJacobian(q);
-            var JT = RMLib.TransposeRM(J);
-            var dq = RMLib.MatVecMul(JT, dX);
+            var JT = Math4.Transpose(J);
+            var dq = Math4.MatVecMul(JT, dX);
 
             for (var j = 0; j < 6; j++)
             {
@@ -552,7 +552,7 @@ public class Manipulator6DoF
         var a = _mdh.A; var d = _mdh.D; var off = _mdh.Offset; var alpha = _mdh.Alpha;
         var T01 = RMLib.DHTransform(q1 + off[0], d[0], a[0], alpha[0]);
         var T12 = RMLib.DHTransform(q2 + off[1], d[1], a[1], alpha[1]);
-        var T02 = RMLib.MatMul4x4(T01, T12);
+        var T02 = Math4.MatMul(T01, T12);
 
         double O2x = T02[0, 3], O2y = T02[1, 3], O2z = T02[2, 3];
         double[] X2 = { T02[0, 0], T02[1, 0], T02[2, 0] };

@@ -8,6 +8,7 @@
 * - Copy.*
 *.bak
 *_.*
+*_/
 
 # User-specific files
 *.rsuser
