@@ -8,6 +8,7 @@
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>

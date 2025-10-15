@@ -16,7 +16,7 @@ namespace RowMeasureUtility
     ///     row 2 = Z-axis vector
     ///   This is exactly the internal layout now used in Kinematics3.
     /// </summary>
-    public static class RMLib
+    internal static class RMLib
     {
         #region Basic structs (lightweight copies to avoid coupling)
         public readonly struct Vec3
@@ -318,48 +318,41 @@ namespace RowMeasureUtility
         }
         #endregion
     }
+    #region Math Library
 
-    // ============================================================
-    // Math4: 基本行列演算（行ベクトル表記）
-    // ============================================================
-    public static class Math4
+    public static class MathUtil
     {
-        public static double[,] InvertHomogeneous(double[,] T)
+        public static double[,] DHTransform(double theta, double d, double a, double alpha)
         {
-            var RT = new double[3, 3];
-            for (var i = 0; i < 3; i++)
-                for (var j = 0; j < 3; j++) RT[i, j] = T[j, i];
-            var p = new[] { T[0, 3], T[1, 3], T[2, 3] };
-            var Rp = new[]
-            {
-                RT[0,0]*p[0]+RT[0,1]*p[1]+RT[0,2]*p[2],
-                RT[1,0]*p[0]+RT[1,1]*p[1]+RT[1,2]*p[2],
-                RT[2,0]*p[0]+RT[2,1]*p[1]+RT[2,2]*p[2]
-            };
-            var Tinv = Math4.Identity();
-            for (var i = 0; i < 3; i++)
-                for (var j = 0; j < 3; j++) Tinv[i, j] = RT[i, j];
-            Tinv[0, 3] = -Rp[0]; Tinv[1, 3] = -Rp[1]; Tinv[2, 3] = -Rp[2];
-            return Tinv;
+            var rX = RotX(alpha);
+            var tX = TransX(a);
+            var rZ = RotZ(theta);
+            var tZ = TransZ(d);
+            return MatMul(MatMul(MatMul(rX, tX), rZ), tZ);
         }
-
-        // Added: 4x4 identity matrix (column-major standard homogeneous)
-        //internal static double[,] Identity() =>
-        //    new double[4, 4]
-        //    {
-        //        {1,0,0,0},
-        //        {0,1,0,0},
-        //        {0,0,1,0},
-        //        {0,0,0,1}
-        //    };
-        internal static double[,] Identity()
+        public static double[,] RotX(double a)
         {
-            return new double[4, 4] {
-                {1,0,0,0},
-                {0,1,0,0},
-                {0,0,1,0},
-                {0,0,0,1}
-            };
+            var c = Math.Cos(a); var s = Math.Sin(a);
+            var T = Identity();
+            T[1, 1] = c; T[1, 2] = -s;
+            T[2, 1] = s; T[2, 2] = c;
+            return T;
+        }
+        public static double[,] RotZ(double a)
+        {
+            var c = Math.Cos(a); var s = Math.Sin(a);
+            var T = Identity();
+            T[0, 0] = c; T[0, 1] = -s;
+            T[1, 0] = s; T[1, 1] = c;
+            return T;
+        }
+        public static double[,] TransX(double a)
+        {
+            var T = Identity(); T[0, 3] = a; return T;
+        }
+        public static double[,] TransZ(double d)
+        {
+            var T = Identity(); T[2, 3] = d; return T;
         }
         public static double[,] MatMul(double[,] A, double[,] B)
         {
@@ -370,91 +363,76 @@ namespace RowMeasureUtility
                         C[i, j] += A[i, k] * B[k, j];
             return C;
         }
-
-        internal static double[] MatVecMul(double[,] M, double[] v)
+        public static double[] MatVecMul(double[,] A, double[] v)
         {
-            int rows = M.GetLength(0), cols = M.GetLength(1);
-            var r = new double[rows];
-            for (var i = 0; i < rows; i++)
-                for (var j = 0; j < cols; j++)
-                    r[i] += M[i, j] * v[j];
+            var r = new double[A.GetLength(0)];
+            for (var i = 0; i < A.GetLength(0); i++)
+                for (var j = 0; j < v.Length; j++)
+                    r[i] += A[i, j] * v[j];
             return r;
         }
-
-        // --- RotX (行ベクトル表記・右手系) ---
-        public static double[,] RotX(double angle)
+        public static double[,] Transpose(double[,] A)
         {
-            var c = Math.Cos(angle);
-            var s = Math.Sin(angle);
-            var T = Identity();
-            T[0, 0] = 1;
-            T[1, 1] = c; T[1, 2] = -s;  // ← -sinθ
-            T[2, 1] = s; T[2, 2] = c;   // ← +sinθ
+            var T = new double[A.GetLength(1), A.GetLength(0)];
+            for (var i = 0; i < A.GetLength(0); i++)
+                for (var j = 0; j < A.GetLength(1); j++)
+                    T[j, i] = A[i, j];
             return T;
         }
-
-        // --- RotZ (行ベクトル表記・右手系) ---
-        public static double[,] RotZ(double angle)
+        public static double[] Cross(double[] a, double[] b) =>
+            [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+        public static double Norm(double[] v)
         {
-            var c = Math.Cos(angle);
-            var s = Math.Sin(angle);
-            var T = Identity();
-            T[0, 0] = c; T[0, 1] = -s;
-            T[1, 0] = s; T[1, 1] = c;
-            T[2, 2] = 1;
-            return T;
+            double s = 0;
+            foreach (var x in v) s += x * x;
+            return Math.Sqrt(s);
         }
-
-        public static double[,] TransX(double a)
+        public static double[] Sub(double[] a, double[] b)
         {
-            var T = Identity();
-            T[0, 3] = a;
-            return T;
+            var r = new double[a.Length];
+            for (var i = 0; i < a.Length; ++i) r[i] = a[i] - b[i];
+            return r;
         }
-
-        public static double[,] TransZ(double d)
+        public static double[,] Identity() =>
+            new double[4, 4] {
+                {1,0,0,0},
+                {0,1,0,0},
+                {0,0,1,0},
+                {0,0,0,1}
+            };
+        public static double[,] InvertHomogeneous(double[,] T)
         {
-            var T = Identity();
-            T[2, 3] = d;
-            return T;
+            var R = new double[3, 3];
+            var p = new double[3];
+            for (int i = 0; i < 3; i++)
+            {
+                p[i] = T[i, 3];
+                for (var j = 0; j < 3; j++) R[i, j] = T[i, j];
+            }
+            var RT = new double[3, 3];
+            for (var i = 0; i < 3; i++)
+                for (var j = 0; j < 3; j++)
+                    RT[i, j] = R[j, i];
+            var negRTp = new double[3];
+            for (var i = 0; i < 3; i++)
+                for (var j = 0; j < 3; j++)
+                    negRTp[i] -= RT[i, j] * p[j];
+            var inv = Identity();
+            for (var i = 0; i < 3; i++)
+            {
+                inv[i, 3] = negRTp[i];
+                for (var j = 0; j < 3; j++)
+                    inv[i, j] = RT[i, j];
+            }
+            return inv;
         }
-
-        /// <summary>
-        /// MDH一行から ^{i-1}T_i を構成
-        /// RotX(α_{i-1}) → TransX(a_{i-1}) → RotZ(θ_i) → TransZ(d_i)
-        /// </summary>
-        public static double[,] BuildLinkTransform(double alpha_im1, double a_im1, double theta_i, double d_i)
+        public static double NormalizeAngle(double a)
         {
-            return MatMul(RotX(alpha_im1),
-                   MatMul(TransX(a_im1),
-                   MatMul(RotZ(theta_i),
-                       TransZ(d_i))));
-        }
-
-        public static double[] MulPoint(double[,] T, double[] p)
-        {
-            var x = T[0, 0] * p[0] + T[0, 1] * p[1] + T[0, 2] * p[2] + T[0, 3];
-            var y = T[1, 0] * p[0] + T[1, 1] * p[1] + T[1, 2] * p[2] + T[1, 3];
-            var z = T[2, 0] * p[0] + T[2, 1] * p[1] + T[2, 2] * p[2] + T[2, 3];
-            return [x, y, z];
-        }
-
-        public static double[] MulDir(double[,] T, double[] v)
-        {
-            var x = T[0, 0] * v[0] + T[0, 1] * v[1] + T[0, 2] * v[2];
-            var y = T[1, 0] * v[0] + T[1, 1] * v[1] + T[1, 2] * v[2];
-            var z = T[2, 0] * v[0] + T[2, 1] * v[1] + T[2, 2] * v[2];
-            return [x, y, z];
-        }
-
-        internal static double[,] Transpose(double[,] M)
-        {
-            int rows = M.GetLength(0), cols = M.GetLength(1);
-            var Tt = new double[cols, rows];
-            for (var r = 0; r < rows; r++)
-                for (var c = 0; c < cols; c++)
-                    Tt[c, r] = M[r, c];
-            return Tt;
+            while (a > Math.PI) a -= 2 * Math.PI;
+            while (a <= -Math.PI) a += 2 * Math.PI;
+            return a;
         }
     }
+
+    #endregion
 }
