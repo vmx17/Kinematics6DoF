@@ -15,14 +15,14 @@ class Program
         var T_tool = new double[4,4];
         for (var r = 0; r < 3; r++)
         {
-            T_tool[r,0] = tool.Rotation[r,0];
-            T_tool[r,1] = tool.Rotation[r,1];
-            T_tool[r,2] = tool.Rotation[r,2];
+            T_tool[r, 0] = tool.Rotation[r, 0];
+            T_tool[r, 1] = tool.Rotation[r, 1];
+            T_tool[r, 2] = tool.Rotation[r, 2];
         }
-        T_tool[0,3] = tool.PositionLocal[0];
-        T_tool[1,3] = tool.PositionLocal[1];
-        T_tool[2,3] = tool.PositionLocal[2];
-        T_tool[3,3] = 1.0;
+        T_tool[0, 3] = tool.PositionLocal[0];
+        T_tool[1, 3] = tool.PositionLocal[1];
+        T_tool[2, 3] = tool.PositionLocal[2];
+        T_tool[3, 3] = 1.0;
 
         Console.WriteLine("\nTool local matrix (flange -> TCP):");
         PrintMatrix(T_tool);
@@ -87,6 +87,129 @@ class Program
             var degStr = string.Join(", ", qs.Select(r => (r * 180 / Math.PI).ToString("F4")));
             Console.WriteLine($"   [{i}] (deg): [{degStr}]");
         }
+
+        // --- 5.a Forward() consistency check across geometric solutions ---
+        if (geo_solutions.Length > 0)
+        {
+            Console.WriteLine("\n5.a Forward() consistency check across geometric solutions...");
+            const double posTol = 1e-3;        // position norm tolerance
+            const double orientTolFrob = 1e-3; // orientation Frobenius norm tolerance (internal)
+            var forwardPosErrors = new double[geo_solutions.Length];
+            var forwardOrientNorms = new double[geo_solutions.Length];
+            var forwardOrientAnglesDeg = new double[geo_solutions.Length];
+            var matrices = new double[geo_solutions.Length][,];
+
+            // Compute FK per geometric solution and error vs T_target
+            for (var i = 0; i < geo_solutions.Length; i++)
+            {
+                var T_sol = robot.Forward(geo_solutions[i]);
+                matrices[i] = T_sol;
+
+                double pe = 0;
+                for (var r = 0; r < 3; r++)
+                {
+                    var d = T_target[r, 3] - T_sol[r, 3];
+                    pe += d * d;
+                }
+                pe = Math.Sqrt(pe);
+
+                double frob = 0;
+                for (var r = 0; r < 3; r++)
+                    for (var c = 0; c < 3; c++)
+                    {
+                        var d = T_target[r, c] - T_sol[r, c];
+                        frob += d * d;
+                    }
+                frob = Math.Sqrt(frob);
+
+                var angleRad = RotationAngle(T_target, T_sol);
+                var angleDeg = angleRad * 180.0 / Math.PI;
+
+                forwardPosErrors[i] = pe;
+                forwardOrientNorms[i] = frob;
+                forwardOrientAnglesDeg[i] = angleDeg;
+
+                Console.WriteLine($"   FK[{i}] position error: {pe:E3}, orient angle: {angleDeg:F4} deg");
+            }
+
+            // Pairwise pose discrepancies (position & orientation angle)
+            if (geo_solutions.Length > 1)
+            {
+                Console.WriteLine("   Pairwise pose discrepancies (position / orientation angle deg):");
+                for (var i = 0; i < geo_solutions.Length; i++)
+                {
+                    for (var j = i + 1; j < geo_solutions.Length; j++)
+                    {
+                        double pErr = 0;
+                        for (var r = 0; r < 3; r++)
+                        {
+                            var d = matrices[i][r, 3] - matrices[j][r, 3];
+                            pErr += d * d;
+                        }
+                        pErr = Math.Sqrt(pErr);
+
+                        var angRad = RotationAngle(matrices[i], matrices[j]);
+                        var angDeg = angRad * 180.0 / Math.PI;
+
+                        Console.WriteLine($"      [{i},{j}] pos: {pErr:E3}, orient angle: {angDeg:F4} deg");
+                    }
+                }
+            }
+
+            var allOk = forwardPosErrors.All(e => e <= posTol) &&
+                        forwardOrientNorms.All(e => e <= orientTolFrob);
+            if (allOk)
+                Console.WriteLine("   Forward() outputs for all geometric solutions: CONSISTENT (within tolerance)");
+            else
+            {
+                Console.WriteLine("   Forward() outputs for geometric solutions: INCONSISTENT (exceed tolerance)");
+                for (var i = 0; i < geo_solutions.Length; i++)
+                {
+                    if (forwardPosErrors[i] > posTol || forwardOrientNorms[i] > orientTolFrob)
+                        Console.WriteLine($"      -> Solution [{i}] exceeds tolerance (pos {forwardPosErrors[i]:E3}, orient angle {forwardOrientAnglesDeg[i]:F4} deg)");
+                }
+            }
+        }
+        // --- End added block ---
+
+        // --- 5.b Ranking geometric IK solutions ---
+        if (geo_solutions.Length > 0)
+        {
+            Console.WriteLine("\n5.b Ranking geometric IK solutions (continuity vs Jacobian solution, elbow-down preference, flip penalty)...");
+
+            // Rank using previous configuration = ik_sol (Jacobian result) for continuity
+            var ranked = robot.InverseGeometricRanked(
+                T_target,
+                previousQ: ik_sol,
+                preferElbowDown: true,
+                continuityWeight: 1.0,
+                wristSingularityWeight: 0.3,
+                elbowPreferenceWeight: 0.3,
+                flipPenaltyWeight: 20.0, // strong penalty pushes flips to bottom
+                continuityJointWeights: new[] { 1.0, 1.0, 1.0, 0.5, 0.5, 0.2 },
+                verbose: 0);
+
+            // Map ranked solutions back to original geo indices (if present)
+            for (var i = 0; i < ranked.Length; i++)
+            {
+                var rs = ranked[i];
+                var idxOrig = FindMatchingSolution(rs.Q, geo_solutions, 1e-6);
+                var degStr = string.Join(", ", rs.Q.Select(r => (r * 180 / Math.PI).ToString("F4")));
+                Console.WriteLine(
+                    $"   Rank[{i}] origIdx={(idxOrig >= 0 ? idxOrig.ToString() : "-")} score={rs.TotalScore:F6} cont={rs.ContinuityCost:F6} " +
+                    $"wrist={rs.WristSingularityScore:F4} elbow={rs.Branch} flipAng={rs.FlipAngleDeg:F4} flipAxis={rs.FlipAxisAligned} => [{degStr}]");
+            }
+
+            var best = ranked.First();
+            var bestDegStr = string.Join(", ", best.Q.Select(r => (r * 180 / Math.PI).ToString("F4")));
+            Console.WriteLine($"\n   Best Ranked Solution (deg): [{bestDegStr}]");
+            Console.WriteLine($"     TotalScore={best.TotalScore:F6} Continuity={best.ContinuityCost:F6} WristSing={best.WristSingularityScore:F4} Elbow={best.Branch} FlipAngle={best.FlipAngleDeg:F4} FlipAxis={best.FlipAxisAligned}");
+
+            // Compare best ranked solution to Jacobian solution
+            Console.WriteLine("   Diff (best ranked - Jacobian) (rad): " +
+                string.Join(", ", ik_sol.Zip(best.Q, (a, b) => NormalizeAngle(b - a).ToString("F6"))));
+        }
+        // --- End ranking block ---
 
         var jacobianInGeoIndex = FindMatchingSolution(ik_sol, geo_solutions, 1e-4);
         if (jacobianInGeoIndex >= 0)
@@ -196,6 +319,17 @@ class Program
     {
         for (var r = 0; r < 4; r++)
             Console.WriteLine($"  [{M[r, 0],8:F3},{M[r, 1],8:F3},{M[r, 2],8:F3},{M[r, 3],8:F3}]");
+    }
+
+    // Rotation angle between target and solution (radians)
+    private static double RotationAngle(double[,] R_target, double[,] R_sol)
+    {
+        double tr = 0;
+        for (var r = 0; r < 3; r++)
+            for (var c = 0; c < 3; c++)
+                tr += R_target[r, c] * R_sol[r, c]; // equals trace(R_target^T * R_sol)
+        var cosTheta = Math.Clamp((tr - 1.0) / 2.0, -1.0, 1.0);
+        return Math.Acos(cosTheta);
     }
 }
 

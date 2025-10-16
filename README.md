@@ -1,21 +1,23 @@
 # 6DoF Manipulator Kinematics with a virtual prismatic joint
 
-This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.
+This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.  
 The implementation is in C#.
-
-## Motivation
-
-Ah...AI, trasformer, LLM. Copilot and Gemini, sometimes Chat-GPT (almost free plan). I've ever made script to solve Forward and Inverse kinematics of a 6DoF real manipulators. Almost of all have a special link that has 90 degree fixed crank. The crank lays between O3 and O4, the origins of local coodinate on robot joints. They were a little bit dirty code especialy solve with geometric approach. Recently, I thought "Why don't I try to make it clean using AI?". The date I've started this project a few days ago, Oct. 5th, 2025. I felt I should wait one or two years until AI becomes more powerful. But I was too impatient. So I started this project.
-
 
 ## Status
 
 There is one forward kinematics function and two inverse kinematics (IK) functions are in "KLib" project, a core of this repository.  
-KLib's forward kinematics and both of inverse kinematics functions are working for initial pose. Now I'm confirming with several patterns.
+KLib's forward kinematics and two inverse kinematics methods are working but I only checked with one pose. Then they are still under verification.
+
+## Motivation
+
+Ah...AI, trasformer, LLM, Generative Pre-trained Transformer, or Copilot and Gemini, sometimes Chat-GPT (almost free plan).  
+I've ever made script to solve Forward and Inverse kinematics of a 6DoF real manipulators. Almost of all have a special link that has 90 degree fixed crank. The crank lays between O3 and O4, the origins of local coodinate on robot joints. They were a little bit dirty code especialy solve with geometric approach.  
+Recently, I thought "Why don't I try to make it clean using generative AI?". The date I've started this project a few days ago, Oct. 5th, 2025. I've spent about a week to get the first working modules.  
+Though I've felt I should wait one or two years until AI becomes more powerful, I was too impatient. So I started this project.
 
 ## Target robot type
 
-This code includes a sample robot: a 6DoF manipulator with joints arranged as Round-Turn-Turn-Round-Turn-Round (RTTRTR). In its initial posture, all link positions have a Y-coordinate of zero. Each joint is rotational, and the joint angle $\theta_i$ serves as the control parameter for the robot's configuration. There are no prismatic (linear) joints. If you're not familiar with designations like "RTTRTR", please refer to the following Fig-1.
+This code includes a sample robot: a 6DoF manipulator with joints arranged as Round-Turn-Turn-Round-Turn-Round (RTTRTR). In its initial posture, all link positions have a Y-coordinate of zero. Each joint is rotational, and the joint angle $\theta_i$ serves as the control parameter for the robot's configuration. There are no real prismatic (linear) joints. If you're not familiar with designations like "RTTRTR", please refer to the following Fig-1.
 
 <div align="center">
     <img src="./RTTRTR.drawio.svg" alt="Fig-1. What is RTTRTR?" width="400">
@@ -24,7 +26,7 @@ This code includes a sample robot: a 6DoF manipulator with joints arranged as Ro
 <br>
 'R' refers to a joint where the central axis of the preceding link and the axis of rotation coincide, while 'T' refers to a joint where the central axis of the preceding link and the axis of rotation are orthogonal. From the base to the tip of the robot, these 'R' and 'T' joints are connected in sequence and denoted by combinations such as "RTTRTR".  
 
-Of course, you can define another type in the code.
+Of course, you can add another type in the code but I'm not resposible for it.
 
 ## Coordinate system representation
 
@@ -37,7 +39,9 @@ Joint and link indices start at 0 for the fixed robot base and increment sequent
 The orientation of links and coordinate axes is represented by unit-length vectors.
 
 ### Tool coordinate system
-The final stage of the manipulator includes a fixed-orientation end-effector, and currently, only one tool is supported per instance. The position and orientation of the tool tip are defined in the local coordinate system $Σ_6$ (i.e., the flange coordinate system) as $(Xt, Yt, Zt, rx, ry, rz)$, and provided as an array of six double-precision elements. The position of the TCP (Tool Center Point), which serves as the control point of the end-effector, is given by $(Xt, Yt, Zt)$, and its orientation is specified by $(rx, ry, rz)$. This orientation indicates how the coordinate system $Σ_t$, placed at the TCP position, must be rotated around each axis of $Σ_6$ in order to align with $Σ_t$ (the origin remains at $(Xt, Yt, Zt)$). The order of applying these rotations is $rz \rightarrow ry \rightarrow rx$. This is NOT an Euler angle representation. It is the so-called Yaskawa convention.
+
+The final stage of the manipulator includes a fixed-orientation end-effector, and currently, only one tool is supported per instance. The position and orientation of the tool tip are defined in the local coordinate system $Σ_6$ (i.e., the flange coordinate system) as $(Xt, Yt, Zt, rx, ry, rz)$, and provided as an array of six double-precision elements. The position of the TCP (Tool Center Point), which serves as the control point of the end-effector, is given by $(Xt, Yt, Zt)$, and its orientation is specified by $(rx, ry, rz)$. This orientation indicates how the coordinate system $Σ_t$, placed at the TCP position, must be rotated around each axis of $Σ_6$ in order to align with $Σ_t$ (the origin remains at $(Xt, Yt, Zt)$). The order of applying these rotations is $rz \rightarrow ry \rightarrow rx$. Then this defines a tool coordinate system ($Σ_t$) at TCP including direction of each axis. Naturally, the $Z_t$ is the direction of the tool point at.
+The way to define these tools, it is NOT an Euler angle representation. It is the so-called Yaskawa convention.
 
 ## Target Specification
 
@@ -50,7 +54,7 @@ $$
 $$
  
 Here, $^{6}T_{t}$ represents the transformation from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. The coordinate system $\varSigma_6$ is regarded as equivalent to the so-called flange coordinate system. The $\varSigma_0$ is the absolute coordinate system. Then the Homogeneous transformation matrices for $^{0}T_{1}$, $^{3}T_{e}$ and $^{6}T_{t}$ are fixed matrices.
-*Strictly speaking, the TCP (Tool Center Point) is not the same as the "tool tip". The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
+*Strictly speaking, the TCP (Tool Center Point) is not same as the "tool tip". The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
 
 All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate joint). 
 
@@ -134,7 +138,6 @@ Please note: this is the first plan for this robot. Same size robot can be descr
 The FK is easy enough with the MDH. The transformation from the absolute coordinate system to the TCP coordinate system are defined completely with the MDH. Remember, this FK includes the TCP position and direction.  
 - KLib.KinematicsCM.Forward() : based on column major matrix operation
 - KLib.KinematicsRM.Forward() : based on row major matrix operation
-*The column-major variant of the function is planned to be deprecated.
 
 ### Inverse Kinematics (IK)
 
@@ -152,6 +155,11 @@ The 90 degree crank between $O_3$ and $O_4$ is the issue for IK. The fixed crank
 - KLib.KinematicsRM.InverseGeometric() : based on row major matrix operation
 *The column-major variant of the function is planned to be deprecated.
 
+#### About result of geometric IK
+
+The most interesting point in KLib might be result of geometical IK. It output several groups of $\theta_i$ to one tool point and direction. I realized it include a flipped tool at $O_6$, means $\theta_6 = A$ and $A + \frac{\pi}{2}$. Apparently it is wrong. There might be another error in combination of some joint angles. Are there any omissions in the definition of tool? No. It comes from "geometical" approach. Algebraically, the order of matrix operations is significant, but geometrically, that order carries no meaning. As a result, the IK function may output a 180-degree flipped configuration as a valid IK result. To remove this, check result of FK-IK-FK round trip and check direction of tool might be sufficient.
+Instead of such checking, a couple of flags will be provided that define fixed pose.
+
 ### Structure of this repository
 
 - KLib : core library project, include kinematics modules
@@ -162,10 +170,8 @@ The 90 degree crank between $O_3$ and $O_4$ is the issue for IK. The fixed crank
 - CheckKLib : console application project, for checking KLib functions
 
 All other projects/codes are under development or test codes or just a gabbage.
-The application? There is a project for it, but no plan to use it.
+The application? There is some projects for it, but no plan to use them for the time moment.
 
 ## Unnecessary addition
 
 Understanding transformation matrices isn’t hard. But when it comes to a 6-DOF manipulator with a quirky crank mechanism, things don’t really get harder—just more of a hassle. I get the feeling that the parts I find complicated are also somewhat tricky for AIs to solve.
-
-Thank you.

@@ -140,7 +140,9 @@ namespace KinematicsRM
         private static readonly Dictionary<string, ToolSpecification> _toolTable = new(StringComparer.OrdinalIgnoreCase)
         {
             // Default "null" tool: zero translation, identity orientation (rx=ry=rz=0)
-            ["null"] = new ToolSpecification([0.0,0.0,0.0], [0.0,0.0,0.0])
+            ["null"] = new ToolSpecification([0.0,0.0,0.0], [0.0,0.0,0.0]),
+            ["TOOL0"] = new ToolSpecification([0.0,0.0,1.0], [0.0,0.0,0.0]),
+            ["TOOL1"] = new ToolSpecification([0.707106781187, 0.0, 1.707106781187], [0.0,45.0,0.0])
         };
 
         public static Manipulator6DoF CreateManipulator(string? robotName = null, string? toolName = null)
@@ -717,7 +719,7 @@ namespace KinematicsRM
                 if (dq == null) break;
 
                 var scale=1.0;
-                for (var ls = 0; ls < 5; ls++)
+                for (int ls = 0; ls < 5; ls++)
                 {
                     var q4t = MathUtil.NormalizeAngle(q4 + scale*dq[0]);
                     var q5t = MathUtil.NormalizeAngle(q5 + scale*dq[1]);
