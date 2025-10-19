@@ -277,26 +277,6 @@ namespace RowMeasureUtility
             };
         }
 
-        // 追加: Modified DH (Craig) 変換
-        // 引数: theta_i, d_i, a_{i-1}, alpha_{i-1}
-        internal static double[,] MDHTransform(double theta, double d, double aPrev, double alphaPrev)
-        {
-            double ct = Math.Cos(theta), st = Math.Sin(theta);
-            double ca = Math.Cos(alphaPrev), sa = Math.Sin(alphaPrev);
-            // MDH:
-            // [  ct     -st      0     a_{i-1} ]
-            // [  st ca  ct ca   -sa   -sa d_i  ]
-            // [  st sa  ct sa    ca    ca d_i  ]
-            // [   0       0       0      1     ]
-            return new double[4, 4]
-            {
-            { ct,      -st,       0,    aPrev },
-            { st*ca,  ct*ca,    -sa,  -sa*d   },
-            { st*sa,  ct*sa,     ca,   ca*d   },
-            { 0,        0,       0,     1     }
-            };
-        }
-
         internal static double[,] Identity() =>
             new double[3, 3] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
@@ -356,11 +336,28 @@ namespace RowMeasureUtility
         }
         public static double[,] MatMul(double[,] A, double[,] B)
         {
-            var C = new double[4, 4];
-            for (var i = 0; i < 4; i++)
-                for (var j = 0; j < 4; j++)
-                    for (var k = 0; k < 4; k++)
+            int rA = A.GetLength(0);
+            int cA = A.GetLength(1);
+            int rB = B.GetLength(0);
+            int cB = B.GetLength(1);
+
+            if (cA != rB)
+            {
+                throw new ArgumentException($"Matrix dimensions are not compatible for multiplication: A is {rA}x{cA}, B is {rB}x{cB}");
+            }
+
+            var C = new double[rA, cB];
+
+            for (var i = 0; i < rA; i++)
+            {
+                for (var j = 0; j < cB; j++)
+                {
+                    for (var k = 0; k < cA; k++)
+                    {
                         C[i, j] += A[i, k] * B[k, j];
+                    }
+                }
+            }
             return C;
         }
         public static double[] MatVecMul(double[,] A, double[] v)

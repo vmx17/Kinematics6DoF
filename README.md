@@ -6,7 +6,9 @@ The implementation is in C#.
 ## Status
 
 There is one forward kinematics function and two inverse kinematics (IK) functions are in "KLib" project, a core of this repository.  
-KLib's forward kinematics and two inverse kinematics methods are working but I only checked with one pose. Then they are still under verification.
+KLib's forward kinematics and two inverse kinematics methods are working but I only checked with "initial" pose.
+And I realize Jacobian IK is wrong. Only FK is working now.
+
 
 ## Motivation
 
