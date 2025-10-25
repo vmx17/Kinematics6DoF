@@ -1,4 +1,4 @@
-# 6DoF Manipulator Kinematics with a virtual prismatic joint
+# 6DoF Manipulator Kinematics with a virtual fixed joint
 
 This project implements computational modules for both forward and inverse kinematics of a 6-degree-of-freedom (6-DoF) robot.  
 The implementation is in C#.
@@ -6,9 +6,8 @@ The implementation is in C#.
 ## Status
 
 There is one forward kinematics function and two inverse kinematics (IK) functions are in "KLib" project, a core of this repository.  
-KLib's forward kinematics and two inverse kinematics methods are working but I only checked with "initial" pose.
-And I realize Jacobian IK is wrong. Only FK is working now.
-
+Though I still struggling to make adequate prompt, the current "free plan"s are difficult to complete these functions.
+Looking `Forward()`, it almost be completed, with optional pointing, but IK is miserable.
 
 ## Motivation
 
@@ -55,7 +54,7 @@ $$
  \boldsymbol{\varSigma_0 \underset{^0T_1}{\Longrightarrow} \varSigma_1 \underset{^1T_2}{\Longrightarrow} \varSigma_2 \underset{^2T_3}{\Longrightarrow} \varSigma_3 \underset{^3T_e}{\Longrightarrow} \varSigma_e \underset{^eT_4}{\Longrightarrow} \varSigma_4 \underset{^4T_5}{\Longrightarrow} \varSigma_5 \underset{^5T_6}{\Longrightarrow} \varSigma_6 \underset{^6T_{t}}{\Longrightarrow} \varSigma_{t} }
 $$
  
-Here, $^{6}T_{t}$ represents the transformation from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. The coordinate system $\varSigma_6$ is regarded as equivalent to the so-called flange coordinate system. The $\varSigma_0$ is the absolute coordinate system. Then the Homogeneous transformation matrices for $^{0}T_{1}$, $^{3}T_{e}$ and $^{6}T_{t}$ are fixed matrices.
+Here, $^{6}T_{t}$ represents the transformation from the robot’s axis coordinate system to the tool (end-effector) tip coordinate system. The coordinate system $\varSigma_6$ is regarded as equivalent to the so-called flange coordinate system. The $\varSigma_0$ is the absolute coordinate system. Then the Homogeneous transformation matrices for $^{0}T_{1}$, $^{3}T_{e}$ and $^{6}T_{t}$ are fixed matrices.  
 *Strictly speaking, the TCP (Tool Center Point) is not same as the "tool tip". The TCP is a control reference point, whereas the tool tip refers to a physical position. However, in this context, I treat them as identical.
 
 All $Z_i$ are defined as the axis of rotation (though $Z_0$ does not have rotate joint). 
@@ -66,9 +65,8 @@ $$
 \boldsymbol{^{i-1}T_i = RotX(x_{i-1}, \alpha_{i-1}) \rightarrow TransX(x_{i-1}, a_{i-1}) \rightarrow RotZ(z_i, \theta_i) \rightarrow TransZ(z_i, d_i)}
 $$
 
-
 *Please note the distinction between $a$ and $\alpha$. The usage of these symbols follows conventional practice.  
-*The order of this matrix multiplication formula may vary in code. When applying matrices to a vector, the order is $RotX, TransX, RotZ, TransZ$, so the formula is $newVector = TransZ \times RotZ \times TransX \times RotX \times Vector$. Depending on the library or struct definition (column-major or row-major), additional matrix operations may be needed. The $"\rightarrow"$ indicates the order of translation, not matrix multiplication $"\times"$. The strict transformation sequence is as follows.
+*The order of this matrix multiplication formula may vary in code. When applying matrices to a vector, the order is $RotX, TransX, RotZ, TransZ$, so the formula is $newVector = TransZ \times RotZ \times TransX \times RotX \times Vector$ (if row-major?). Depending on the library or struct definition (column-major or row-major), additional or reversed matrix operations may be needed. Geometically, the $"\rightarrow"$ indicates the order of translation, not matrix multiplication $"\times"$. The strict transformation sequence is as follows.
 
 The $^{i-1}T_i$ transformation is performed in the following sequence:
 
@@ -95,6 +93,20 @@ In the following table, $\overrightarrow{Z_i}$ and $\overrightarrow{X_i}$ denote
 |4|$-\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|0|(0,-1,0)|(-1,0,0)|
 |5|$-\frac{\pi}{2}$|0|$\theta_5$|0|(0,0,-1)|(-1,0,0)|
 |6|0|0|$\theta_6$|24.29|(0,0,-1)|(-1,0,0)|
+
+"e"をなくすと
+
+|\(i\)|\(\alpha _{i-1}\)|\(a_{i-1}\)|\(d_{i}\)|\(\theta _{i}\)|物理角度のオフセット値|$\overrightarrow{X_i}$|$\overrightarrow{Z_i}$|$O_i$|
+|---|---|---|---|---|---|---|---|---|
+|1|0|0|127.0|\(\theta _{1}\)|0|(1,0,0)|(0,0,1)|(0,0,127)|
+|2|\(\pi /2\)|29.69|0|\(\theta _{2}\)|\(\pi /2\)|(0,0,1)|(0,-1,0)|(26.29,0,127)|
+|3|0|108|0|\(\theta _{3}\)|\(-\pi /2\)|(1,0,0)|(0,-1,0)|(26.29,0,127+108)|
+|4|\(\pi /2\)|0|-20|\(\theta _{4}\)|0|(1,0,0)|(0,0,-1)|()|
+|5|\(-\pi /2\)|168.98|0|\(\theta _{5}\)|0|()|()|()|
+|6|\(\pi /2\)|0|0|\(\theta _{6}\)|0|()|()|()|
+|7|0|0|24.29|\(\theta _{7}\)|0|()|()|()|
+
+
 
 where,  
 $a$: link length (length of the common normal line)  
@@ -159,7 +171,7 @@ The 90 degree crank between $O_3$ and $O_4$ is the issue for IK. The fixed crank
 
 #### About result of geometric IK
 
-The most interesting point in KLib might be result of geometical IK. It output several groups of $\theta_i$ to one tool point and direction. I realized it include a flipped tool at $O_6$, means $\theta_6 = A$ and $A + \frac{\pi}{2}$. Apparently it is wrong. There might be another error in combination of some joint angles. Are there any omissions in the definition of tool? No. It comes from "geometical" approach. Algebraically, the order of matrix operations is significant, but geometrically, that order carries no meaning. As a result, the IK function may output a 180-degree flipped configuration as a valid IK result. To remove this, check result of FK-IK-FK round trip and check direction of tool might be sufficient.
+The most interesting point in KLib might be result of geometical IK. It output several groups of $\theta_i$ to one tool point and direction. I realized it include a flipped tool at $O_6$, means $\theta_6 = A$ and $A + \frac{\pi}{2}$. Apparently it is wrong. This is not "Flipped" nor "elbow up/down". There might be another error in combination of some joint angles. Are there any omissions in the definition of tool? No. It comes from "geometical" approach. Algebraically, the order of matrix operations is significant, but geometrically, that order carries no meaning. As a result, the IK function may output a 180-degree flipped configuration as a valid IK result. To remove this, check result of FK-IK-FK round trip and check direction of tool might be sufficient.
 Instead of such checking, a couple of flags will be provided that define fixed pose.
 
 ### Structure of this repository

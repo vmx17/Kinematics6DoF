@@ -79,6 +79,11 @@ namespace KinematicsRM2
 
     public static class ManipulatorFactory
     {
+        private static readonly Dictionary<string, ToolSpecification> _toolTable = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["null"] = new ToolSpecification([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+        };
+
         private static readonly Dictionary<string, MDHParameters> _mdhTable = new(StringComparer.OrdinalIgnoreCase)
         {
             ["MiRobot"] = new MDHParameters(
@@ -86,8 +91,8 @@ namespace KinematicsRM2
                     a:      [0.0, 29.69, 108.0, 168.98, 0.0, 0.0],
                     d:      [127.0, 0.0, 0.0, 0.0, 0.0, 24.29],
                     offset: [0.0, Math.PI / 2, -Math.PI / 2, -Math.PI, 0.0, 0.0],
-                    minDeg: new double[] { -180, -180, -90, -180, -180, -360 },
-                    maxDeg: new double[] {  180,   90, 180,  180,   90,  360 },
+                    minDeg: [-179.9999, -179.9999, -89.9999, -179.9999, -179.9999, -359.9999],
+                    maxDeg: [180.0,   90.0, 180.0,  180.0,   90.0,  360.0],
                     eAlpha: Math.PI / 2, eA: 0.0, eD: -20.0, eTheta: 0.0
                 )
         };
@@ -219,187 +224,173 @@ namespace KinematicsRM2
 
         #endregion
 
-        #region Inverse Kinematics (Re-implementation)
+        #region Inverse Kinematics (Jacobian numerical, DLS)
 
         public double[]? InverseJacobian(
             double[,] T_target,
             double[] q_initial,
             out bool success,
-            int maxIterations = 100,
-            double tolerance = 1e-5,
-            double alpha = 0.5,      // Step size
-            double damping = 0.02,     // Damping factor for DLS
+            int maxIterations = 300,
+            double tolerance = 1e-6,
+            double alpha = 1.0,
+            double damping = 1e-3,
             int verbose = 0)
         {
             var q = (double[])q_initial.Clone();
+            ClampToLimits(q);
 
             for (var iter = 0; iter < maxIterations; iter++)
             {
-                // 1. Calculate current pose with Forward Kinematics
                 var T_cur = Forward(q);
-
-                // 2. Calculate the 6D error vector (position and orientation)
-                var err = CalculatePoseError(T_cur, T_target);
+                var err = PoseErrorFull(T_cur, T_target);
                 var errNorm = MathUtil.Norm(err);
-
-                if (verbose > 0)
-                    Console.WriteLine($" iter {iter} err={errNorm:E4}");
-
-                // 3. Check for convergence
                 if (errNorm < tolerance)
                 {
                     success = true;
-                    if (verbose > 0) Console.WriteLine($"[InverseJacobian] Converged at iteration {iter} with error {errNorm:E4}");
+                    if (verbose > 0) Console.WriteLine($"[InverseJacobian] Converged iter={iter} err={errNorm:E3}");
                     return q;
                 }
 
-                // 4. Calculate the Geometric Jacobian
-                var J = CalculateGeometricJacobian(q);
+                var J = CalculateJacobian(q);
+                var JJt = new double[6, 6];
+                for (var r = 0; r < 6; r++)
+                    for (var c = 0; c < 6; c++)
+                        for (var k = 0; k < 6; k++)
+                            JJt[r, c] += J[r, k] * J[c, k];
 
-                // 5. Solve for the change in joint angles (dq) using Damped Least Squares (DLS)
-                // (J * J^T + damping^2 * I) * y = err
-                // dq = J^T * y
-                var JJt = MathUtil.MatMul(J, MathUtil.Transpose(J));
-                for (int i = 0; i < 6; i++) JJt[i, i] += damping * damping;
-
-                var y = SolveByCholesky(JJt, err);
-                if (y == null)
-                {
-                    if (verbose > 0) Console.WriteLine("Solver failed (matrix may be non-positive definite). Aborting.");
-                    break; // Solver failed, exit loop
-                }
-
-                var dq = MathUtil.MatVecMul(MathUtil.Transpose(J), y);
-
-                // 6. Update joint angles
                 for (var i = 0; i < 6; i++)
-                {
-                    q[i] += alpha * dq[i];
-                }
+                    JJt[i, i] += damping * damping;
 
-                // 7. Enforce joint limits
+                var y = SolveSymmetric6(JJt, err);
+                if (y == null) break;
+                var JT = MathUtil.Transpose(J);
+                var dq = MathUtil.MatVecMul(JT, y);
+
+                for (var i = 0; i < 6; i++)
+                    q[i] = MathUtil.NormalizeAngle(q[i] + alpha * dq[i]);
+
                 ClampToLimits(q);
+                if (verbose > 1)
+                    Console.WriteLine($" iter {iter} err={errNorm:E3}");
             }
-
             success = false;
             return null;
         }
 
-        private double[,] CalculateGeometricJacobian(double[] q)
+        private double[,] CalculateJacobian(double[] q)
         {
-            int[] axisFrameIdx = { 0, 1, 2, 3, 5, 6 };
+            int[] axisFrameIdx = { 0, 1, 2, 4, 5, 6 };
             var J = new double[6, 6];
             var transforms = GetFrameTransforms(q);
             var p_eff = new[] { transforms[^1][0, 3], transforms[^1][1, 3], transforms[^1][2, 3] };
 
             for (var joint = 0; joint < 6; joint++)
             {
-                var T_prev = transforms[axisFrameIdx[joint]];
-                var z_axis = new[] { T_prev[0, 2], T_prev[1, 2], T_prev[2, 2] };
-                var o_origin = new[] { T_prev[0, 3], T_prev[1, 3], T_prev[2, 3] };
-                
-                var J_linear = MathUtil.Cross(z_axis, MathUtil.Sub(p_eff, o_origin));
-                var J_angular = z_axis;
-
+                var Tz = transforms[axisFrameIdx[joint]];
+                var z = new[] { Tz[0, 2], Tz[1, 2], Tz[2, 2] };
+                var o = new[] { Tz[0, 3], Tz[1, 3], Tz[2, 3] };
+                var Jv = MathUtil.Cross(z, MathUtil.Sub(p_eff, o));
                 for (var r = 0; r < 3; r++)
                 {
-                    J[r, joint] = J_linear[r];
-                    J[r + 3, joint] = J_angular[r];
+                    J[r, joint] = Jv[r];
+                    J[r + 3, joint] = z[r];
                 }
             }
             return J;
         }
 
-        private double[] CalculatePoseError(double[,] T_cur, double[,] T_target)
+        private double[] PoseErrorFull(double[,] T_cur, double[,] T_target)
         {
             var err = new double[6];
-            
-            // Position error (world frame)
             for (var i = 0; i < 3; i++)
                 err[i] = T_target[i, 3] - T_cur[i, 3];
 
-            // Orientation error (world frame)
+            // --- 修正版: 回転誤差を現在のエンドエフェクタ座標系で表現 ---
+            var R_cur = new double[3, 3];
+            var R_tar = new double[3, 3];
+            for (var i = 0; i < 3; i++)
+                for (var j = 0; j < 3; j++)
+                {
+                    R_cur[i, j] = T_cur[i, j];
+                    R_tar[i, j] = T_target[i, j];
+                }
+            // R_err = R_cur^T * R_tar
             var R_err = new double[3, 3];
             for (var i = 0; i < 3; i++)
                 for (var j = 0; j < 3; j++)
                     for (var k = 0; k < 3; k++)
-                        R_err[i, j] += T_target[i, k] * T_cur[j, k]; // R_target * R_current^T
+                        R_err[i, j] += R_cur[k, i] * R_tar[k, j];
 
-            // Convert rotation error matrix to axis-angle vector
             var trace = R_err[0, 0] + R_err[1, 1] + R_err[2, 2];
-            var angle = Math.Acos(Math.Clamp((trace - 1.0) / 2.0, -1.0, 1.0));
-
-            if (Math.Abs(angle) < 1e-9)
+            double[] w;
+            if (trace > 2.999999)
             {
-                // No orientation error
-                err[3] = 0; err[4] = 0; err[5] = 0;
+                w = new[]
+                {
+                    0.5 * (R_err[2, 1] - R_err[1, 2]),
+                    0.5 * (R_err[0, 2] - R_err[2, 0]),
+                    0.5 * (R_err[1, 0] - R_err[0, 1])
+                };
             }
             else
             {
+                var cosA = (trace - 1) * 0.5;
+                cosA = Math.Clamp(cosA, -1.0, 1.0);
+                var angle = Math.Acos(cosA);
                 var s = 2 * Math.Sin(angle);
-                var ax = (R_err[2, 1] - R_err[1, 2]) / s;
-                var ay = (R_err[0, 2] - R_err[2, 0]) / s;
-                var az = (R_err[1, 0] - R_err[0, 1]) / s;
-                err[3] = ax * angle;
-                err[4] = ay * angle;
-                err[5] = az * angle;
+                if (Math.Abs(s) < 1e-9) s = 1e-9;
+                var axis = new[]
+                {
+                    (R_err[2, 1] - R_err[1, 2]) / s,
+                    (R_err[0, 2] - R_err[2, 0]) / s,
+                    (R_err[1, 0] - R_err[0, 1]) / s
+                };
+                w = new[] { axis[0] * angle, axis[1] * angle, axis[2] * angle };
             }
+            err[3] = w[0]; err[4] = w[1]; err[5] = w[2];
             return err;
         }
 
-        private static double[]? SolveByCholesky(double[,] A, double[] b)
+        private static double[]? SolveSymmetric6(double[,] A, double[] b)
         {
-            const int n = 6;
-            var L = new double[n, n];
-
-            for (int i = 0; i < n; i++)
+            var n = 6;
+            var M = new double[n, n];
+            var rhs = new double[n];
+            for (var i = 0; i < n; i++)
             {
-                for (int j = 0; j <= i; j++)
+                rhs[i] = b[i];
+                for (var j = 0; j < n; j++)
+                    M[i, j] = A[i, j];
+            }
+            for (var k = 0; k < n; k++)
+            {
+                var piv = k;
+                var max = Math.Abs(M[k, k]);
+                for (var r = k + 1; r < n; r++)
                 {
-                    double sum = 0;
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum += L[i, k] * L[j, k];
-                    }
-
-                    if (i == j)
-                    {
-                        double d = A[i, i] - sum;
-                        if (d <= 1e-12) return null; 
-                        L[i, i] = Math.Sqrt(d);
-                    }
-                    else
-                    {
-                        if (Math.Abs(L[j, j]) < 1e-12) return null; 
-                        L[i, j] = (A[i, j] - sum) / L[j, j];
-                    }
+                    var v = Math.Abs(M[r, k]);
+                    if (v > max) { max = v; piv = r; }
+                }
+                if (max < 1e-14) return null;
+                if (piv != k)
+                {
+                    for (var c = k; c < n; c++) (M[k, c], M[piv, c]) = (M[piv, c], M[k, c]);
+                    (rhs[k], rhs[piv]) = (rhs[piv], rhs[k]);
+                }
+                var diag = M[k, k];
+                for (var c = k; c < n; c++) M[k, c] /= diag;
+                rhs[k] /= diag;
+                for (var r = 0; r < n; r++)
+                {
+                    if (r == k) continue;
+                    var factor = M[r, k];
+                    if (Math.Abs(factor) < 1e-16) continue;
+                    for (var c = k; c < n; c++)
+                        M[r, c] -= factor * M[k, c];
+                    rhs[r] -= factor * rhs[k];
                 }
             }
-
-            var y = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                double sum = 0;
-                for (int k = 0; k < i; k++)
-                {
-                    sum += L[i, k] * y[k];
-                }
-                if (Math.Abs(L[i, i]) < 1e-12) return null;
-                y[i] = (b[i] - sum) / L[i, i];
-            }
-
-            var x = new double[n];
-            for (int i = n - 1; i >= 0; i--)
-            {
-                double sum = 0;
-                for (int k = i + 1; k < n; k++)
-                {
-                    sum += L[k, i] * x[k];
-                }
-                if (Math.Abs(L[i, i]) < 1e-12) return null;
-                x[i] = (y[i] - sum) / L[i, i];
-            }
-            return x;
+            return rhs;
         }
 
         #endregion
@@ -846,9 +837,9 @@ namespace KinematicsRM2
         private static void RelativeRotationAxisAngle(double[,] A, double[,] B, out double[] axis, out double angleDeg)
         {
             var Rrel = new double[3,3];
-            for (int r = 0; r < 3; r++)
-                for (int c = 0; c < 3; c++)
-                    for (int k = 0; k < 3; k++)
+            for (var r = 0; r < 3; r++)
+                for (var c = 0; c < 3; c++)
+                    for (var k = 0; k < 3; k++)
                         Rrel[r, c] += A[k, r] * B[k, c]; // A^T * B
 
             var trace = Rrel[0,0]+Rrel[1,1]+Rrel[2,2];
@@ -890,7 +881,7 @@ namespace KinematicsRM2
             double tr=0;
             for (var k = 0; k < 3; k++)
                 tr += RA[0, k] * RB[0, k] + RA[1, k] * RB[1, k] + RA[2, k] * RB[2, k];
-            double cosTheta = Math.Clamp((tr - 1.0)/2.0,-1.0,1.0);
+            var cosTheta = Math.Clamp((tr - 1.0)/2.0,-1.0,1.0);
             return Math.Acos(cosTheta) * 180.0 / Math.PI;
         }
 
@@ -971,7 +962,7 @@ namespace KinematicsRM2
             {
                 var Tcand = Forward(q);
                 // Continuity cost
-                double cont = 0.0;
+                var cont = 0.0;
                 if (previousQ is { Length: 6 })
                     for (int i = 0; i < 6; i++)
                     {
@@ -990,7 +981,7 @@ namespace KinematicsRM2
 
                 // Flip classification
                 RelativeRotationAxisAngle(Tcand, T_target, out var axis, out var angleDeg);
-                bool flipAxisAligned = angleDeg >= OrientationFlipRejectDeg && IsAxisAlignedFlip(Tcand, T_target);
+                var flipAxisAligned = angleDeg >= OrientationFlipRejectDeg && IsAxisAlignedFlip(Tcand, T_target);
 
                 var total = continuityWeight * cont +
                                 wristSingularityWeight * wristScore +
@@ -1012,7 +1003,7 @@ namespace KinematicsRM2
             if (verbose > 0)
             {
                 Console.WriteLine("[InverseGeometricRanked] Solutions sorted by TotalScore:");
-                for (int i = 0; i < ordered.Length; i++)
+                for (var i = 0; i < ordered.Length; i++)
                 {
                     var s = ordered[i];
                     Console.WriteLine($"  [{i}] Qdeg=[{DegStr(s.Q)}] score={s.TotalScore:F6} cont={s.ContinuityCost:F6} wrist={s.WristSingularityScore:F4} elbow={s.Branch} flipAng={s.FlipAngleDeg:F4} flipAxis={s.FlipAxisAligned}");
@@ -1028,16 +1019,14 @@ namespace KinematicsRM2
         public void PrintJointZAxes(double[] q)
         {
             var transforms = GetFrameTransforms(q);
-            // Use the corrected indices to print the correct Z axes for each joint
-            int[] axisFrameIdx = { 0, 1, 2, 3, 5, 6 }; 
+            int[] axisFrameIdx = { 0, 1, 2, 4, 5, 6 };
             for (var joint = 0; joint < 6; joint++)
             {
-                var Tprev = transforms[axisFrameIdx[joint]];
-                var z = new[] { Tprev[0, 2], Tprev[1, 2], Tprev[2, 2] };
+                var Tz = transforms[axisFrameIdx[joint]];
+                var z = new[] { Tz[0, 2], Tz[1, 2], Tz[2, 2] };
                 Console.WriteLine($"Joint {joint + 1} Z axis: ({z[0]:F6}, {z[1]:F6}, {z[2]:F6})");
             }
         }
-
         #endregion
     }
 }
