@@ -13,6 +13,8 @@ Looking `Forward()`, it almost be completed, with optional pointing, but IK is m
 - Gemini-CLI: Great code self simulation tool even it is performance issue, it makes modules and compare performance. But the quality is as same as Gemini pro 2.5. For poor programmer like me, most recommended.  
 - Gemini pro 2.5: Ah... I've run out of this month's limit.  
 
+Anyway, I begin to think that I have to dive into the code generated to make it work correctly (or wait several months?).  
+
 ## Motivation
 
 Ah...AI, trasformer, LLM, Generative Pre-trained Transformer, or Copilot and Gemini, sometimes Chat-GPT (almost free plan).  
@@ -45,12 +47,12 @@ The orientation of links and coordinate axes is represented by unit-length vecto
 
 ### Tool coordinate system
 
-The final stage of the manipulator includes a fixed-orientation end-effector, and currently, only one tool is supported per instance. The position and orientation of the tool tip are defined in the local coordinate system $\varSigma_6$ (i.e., the flange coordinate system) as $(Xt, Yt, Zt, rx, ry, rz)$, and provided as an array of six double-precision elements. The position of the TCP (Tool Center Point), which serves as the control point of the end-effector, is given by $(Xt, Yt, Zt)$, and its orientation is specified by $(rx, ry, rz)$. This orientation indicates how the coordinate system $\varSigma_t$, placed at the TCP position, must be rotated around each axis of $\varSigma_6$ in order to align with $\varSigma_t$ (the origin remains at $(Xt, Yt, Zt)$). The order of applying these rotations is $rz \rightarrow ry \rightarrow rx$. Then this defines a tool coordinate system ($\varSigma_t$) at TCP including direction of each axis. Naturally, the $Z_t$ is the direction of the tool point at.
+The final stage of the manipulator includes a fixed-orientation end-effector, and currently, only one tool is supported per instance. The position and orientation of the tool tip are defined in the local coordinate system $\varSigma_6$ (i.e., the flange coordinate system) as $(X_t, Y_t, Z_t, rx, ry, rz)$, and provided as an array of six double-precision elements. The position of the TCP (Tool Center Point), which serves as the control point of the end-effector, is given by $(X_t, Y_t, Z_t)$, and its orientation is specified by $(rx, ry, rz)$. This orientation indicates how the coordinate system $\varSigma_t$, placed at the TCP position, must be rotated around each axis of $\varSigma_6$ in order to align with $\varSigma_t$ (the origin remains at $(X_t, Y_t, Z_t)$). The order of applying these rotations is $rz \rightarrow ry \rightarrow rx$. Then this defines a tool coordinate system ($\varSigma_t$) at TCP including direction of each axis. Naturally, the $Z_t$ is the direction of the tool point at.
 The way to define these tools, it is NOT an Euler angle representation. It is the so-called Yaskawa convention.
 
 ### World coordinate ssytem (again)
 
-The absolute coordinate system $\varSigma_0$ is also referred to as the world coordinate system $\varSigma_{abs}$. As default, the robot base is assumed to be located at the origin point (0, 0, 0). The orientation of the axes in this system is defined such that the positive $X_0$ axis points forward from the robot base, the positive $Z_0$ axis points upward, and the positive $Y_0$ axis points to the left side of the robot when viewed from above. This right-handed coordinate system serves as the reference frame for all transformations and calculations related to the robot's kinematics. The mounting paramters are like tool coordinate system, $(X_0, Y_0, Z_0, rx_0, ry_0, rz_0)$. Then in the default, $\verSigma_0$ is as same as the $\verSigma_1$.
+The absolute coordinate system $\varSigma_0$ is also referred to as the world coordinate system $\varSigma_{abs}$. As default, the robot base is assumed to be located at the origin point (0, 0, 0). The orientation of the axes in this system is defined such that the positive $X_0$ axis points forward from the robot base, the positive $Z_0$ axis points upward, and the positive $Y_0$ axis points to the left side of the robot when viewed from above. This right-handed coordinate system serves as the reference frame for all transformations and calculations related to the robot's kinematics. The mounting paramters are like tool coordinate system, $(X_0, Y_0, Z_0, rx_0, ry_0, rz_0)$. Then in the default, $\varSigma_0$ is as same as the $\varSigma_1$.
 
 ## Target Specification
 
