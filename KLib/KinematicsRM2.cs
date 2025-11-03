@@ -6,7 +6,7 @@ using static RowMeasureUtility.MathUtil;
 
 namespace KinematicsRM2
 {
-    #region Data Structures
+   #region Data Structures
 
     public sealed class MDHParameters
     {
@@ -79,7 +79,7 @@ namespace KinematicsRM2
 
     public static class ManipulatorFactory
     {
-        private static readonly Dictionary<string, ToolSpecification> _toolTable = new(StringComparer.OrdinalIgnoreCase)
+        private static readonly Dictionary<string, ToolSpecification> _mountTable = new(StringComparer.OrdinalIgnoreCase)
         {
             ["null"] = new ToolSpecification([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
         };

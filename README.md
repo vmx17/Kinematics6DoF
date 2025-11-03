@@ -7,7 +7,11 @@ The implementation is in C#.
 
 There is one forward kinematics function and two inverse kinematics (IK) functions are in "KLib" project, a core of this repository.  
 Though I still struggling to make adequate prompt, the current "free plan"s are difficult to complete these functions.
-Looking `Forward()`, it almost be completed, with optional pointing, but IK is miserable.
+Looking `Forward()`, it almost be completed, with optional pointing, but IK is miserable.  
+- GPT4.1 on GitHub: cannot read pdf but read markdown with TeX formulas. It does not understand MDH. MDH has several convention then I define it cleary as my local convention but it repeat changing only the order of  multiplication of RotX, TransX, RotZ, TransZ. It should not be used for code generation. It show some patches at VisualStudio, sometimes they erase rest of dictation. It tries to force the knowledge it already has into an answer to my question, and ends up giving an incorrect response.   
+- Gemini flash 2.5: it can solve Inverse Jacobian but not Inverse Geometric. The output cord is partial (default).
+- Gemini-CLI: Great code self simulation tool even it is performance issue, it makes modules and compare performance. But the quality is as same as Gemini pro 2.5. For poor programmer like me, most recommended.  
+- Gemini pro 2.5: Ah... I've run out of this month's limit.  
 
 ## Motivation
 
@@ -33,16 +37,20 @@ Of course, you can add another type in the code but I'm not resposible for it.
 
 Since the system operates in three-dimensional space, transformation equations are primarily structured as products of $4\times4$ Homogeneous transformation matrices. All coordinate systems are Cartesian and use a right-handed convention. The sign of rotational angles follows the right-hand rule: when viewed from a positive position along the axis toward the origin, counterclockwise (CCW) rotation is considered positive.  
 
-The space where the robot is installed is called the absolute (or world) coordinate system $Σ_0$. It's axis are represented as $(X_0, Y_0, Z_0)$. In the "initial" posture—where all joint angles $\theta_i$ are zero, the orientation of the absolute coordinate axes is as follows: the forward direction from the robot base corresponds to the positive $X_0$ axis, represented by the vector (1, 0, 0); the upward direction aligns with the $Z_0$ axis, represented by (0, 0, 1); and, due to the right-handed convention, the positive $Y_0$ axis points to the robot's left, represented by (0, 1, 0). For now, the robot is assumed to be positioned at the origin of the absolute coordinate system.
+The space where the robot is installed is called the absolute (or world) coordinate system $\varSigma_0$. It's axis are represented as $(X_0, Y_0, Z_0)$. In the "initial" posture—where all joint angles $\theta_i$ are zero, the orientation of the absolute coordinate axes is as follows: the forward direction from the robot base corresponds to the positive $X_0$ axis, represented by the vector (1, 0, 0); the upward direction aligns with the $Z_0$ axis, represented by (0, 0, 1); and, due to the right-handed convention, the positive $Y_0$ axis points to the robot's left, represented by (0, 1, 0). For now, the robot is assumed to be positioned at the origin of the absolute coordinate system.
 
-Joint and link indices start at 0 for the fixed robot base and increment sequentially toward the end-effector: 1, 2, ..., n. Coordinates are expressed with it's origin $O_i$ position and axes $(X, Y, Z)$ in verctor on $Σ_{abs}$, with units in millimeters. Values are rounded to three decimal places for precision. Angular measurements are in radians, but when converted to degrees, values are rounded to four decimal places.
+Joint and link indices start at 0 for the fixed robot base and increment sequentially toward the end-effector: 1, 2, ..., n. Coordinates are expressed with it's origin $O_i$ position and axes $(X, Y, Z)$ in verctor on $\varSigma_{abs}$, with units in millimeters. Values are rounded to three decimal places for precision. Angular measurements are in radians, but when converted to degrees, values are rounded to four decimal places.
 
 The orientation of links and coordinate axes is represented by unit-length vectors.
 
 ### Tool coordinate system
 
-The final stage of the manipulator includes a fixed-orientation end-effector, and currently, only one tool is supported per instance. The position and orientation of the tool tip are defined in the local coordinate system $Σ_6$ (i.e., the flange coordinate system) as $(Xt, Yt, Zt, rx, ry, rz)$, and provided as an array of six double-precision elements. The position of the TCP (Tool Center Point), which serves as the control point of the end-effector, is given by $(Xt, Yt, Zt)$, and its orientation is specified by $(rx, ry, rz)$. This orientation indicates how the coordinate system $Σ_t$, placed at the TCP position, must be rotated around each axis of $Σ_6$ in order to align with $Σ_t$ (the origin remains at $(Xt, Yt, Zt)$). The order of applying these rotations is $rz \rightarrow ry \rightarrow rx$. Then this defines a tool coordinate system ($Σ_t$) at TCP including direction of each axis. Naturally, the $Z_t$ is the direction of the tool point at.
+The final stage of the manipulator includes a fixed-orientation end-effector, and currently, only one tool is supported per instance. The position and orientation of the tool tip are defined in the local coordinate system $\varSigma_6$ (i.e., the flange coordinate system) as $(Xt, Yt, Zt, rx, ry, rz)$, and provided as an array of six double-precision elements. The position of the TCP (Tool Center Point), which serves as the control point of the end-effector, is given by $(Xt, Yt, Zt)$, and its orientation is specified by $(rx, ry, rz)$. This orientation indicates how the coordinate system $\varSigma_t$, placed at the TCP position, must be rotated around each axis of $\varSigma_6$ in order to align with $\varSigma_t$ (the origin remains at $(Xt, Yt, Zt)$). The order of applying these rotations is $rz \rightarrow ry \rightarrow rx$. Then this defines a tool coordinate system ($\varSigma_t$) at TCP including direction of each axis. Naturally, the $Z_t$ is the direction of the tool point at.
 The way to define these tools, it is NOT an Euler angle representation. It is the so-called Yaskawa convention.
+
+### World coordinate ssytem (again)
+
+The absolute coordinate system $\varSigma_0$ is also referred to as the world coordinate system $\varSigma_{abs}$. As default, the robot base is assumed to be located at the origin point (0, 0, 0). The orientation of the axes in this system is defined such that the positive $X_0$ axis points forward from the robot base, the positive $Z_0$ axis points upward, and the positive $Y_0$ axis points to the left side of the robot when viewed from above. This right-handed coordinate system serves as the reference frame for all transformations and calculations related to the robot's kinematics. The mounting paramters are like tool coordinate system, $(X_0, Y_0, Z_0, rx_0, ry_0, rz_0)$. Then in the default, $\verSigma_0$ is as same as the $\verSigma_1$.
 
 ## Target Specification
 
@@ -93,20 +101,6 @@ In the following table, $\overrightarrow{Z_i}$ and $\overrightarrow{X_i}$ denote
 |4|$-\frac{\pi}{2}$|168.98|$-\pi+\theta_4$|0|(0,-1,0)|(-1,0,0)|
 |5|$-\frac{\pi}{2}$|0|$\theta_5$|0|(0,0,-1)|(-1,0,0)|
 |6|0|0|$\theta_6$|24.29|(0,0,-1)|(-1,0,0)|
-
-"e"をなくすと
-
-|\(i\)|\(\alpha _{i-1}\)|\(a_{i-1}\)|\(d_{i}\)|\(\theta _{i}\)|物理角度のオフセット値|$\overrightarrow{X_i}$|$\overrightarrow{Z_i}$|$O_i$|
-|---|---|---|---|---|---|---|---|---|
-|1|0|0|127.0|\(\theta _{1}\)|0|(1,0,0)|(0,0,1)|(0,0,127)|
-|2|\(\pi /2\)|29.69|0|\(\theta _{2}\)|\(\pi /2\)|(0,0,1)|(0,-1,0)|(26.29,0,127)|
-|3|0|108|0|\(\theta _{3}\)|\(-\pi /2\)|(1,0,0)|(0,-1,0)|(26.29,0,127+108)|
-|4|\(\pi /2\)|0|-20|\(\theta _{4}\)|0|(1,0,0)|(0,0,-1)|()|
-|5|\(-\pi /2\)|168.98|0|\(\theta _{5}\)|0|()|()|()|
-|6|\(\pi /2\)|0|0|\(\theta _{6}\)|0|()|()|()|
-|7|0|0|24.29|\(\theta _{7}\)|0|()|()|()|
-
-
 
 where,  
 $a$: link length (length of the common normal line)  
